@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="de" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mindmap Studio</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: { 50: '#eff6ff', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8' }
+          }
+        }
+      }
+    }
+  </script>
+  <!-- Marked for Markdown rendering -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <link rel="stylesheet" href="/static/css/app.css" />
+</head>
+<body class="h-full bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans antialiased overflow-hidden select-none">
+
+  <!-- ========================================================================= -->
+  <!-- 1. DASHBOARD VIEW (STARTSEITE: MULTI-PROJEKT-ÜBERSICHT) -->
+  <!-- ========================================================================= -->
+  <div id="dashboardView" class="h-full flex flex-col overflow-y-auto">
+    <!-- Dashboard Header -->
+    <header class="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 sticky top-0 z-20 px-6 py-4 flex items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-xl text-white shadow-md shadow-blue-500/20">
+          🧠
+        </div>
+        <div>
+          <h1 class="font-extrabold text-base sm:text-lg tracking-tight text-slate-900 dark:text-white leading-tight">
+            Mindmap Studio
+          </h1>
+          <p class="text-[11px] text-slate-500 dark:text-slate-400">Visuelles Wissensmanagement &amp; Recherche</p>
+        </div>
+      </div>
+
+      <!-- Search & Actions -->
+      <div class="flex items-center gap-2.5">
+        <div class="relative hidden sm:block w-64">
+          <input
+            type="text"
+            placeholder="Projekte durchsuchen..."
+            oninput="window.StudioApp.Dashboard?.setSearchQuery(this.value)"
+            class="w-full bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:border-blue-500 pl-8"
+          />
+          <span class="absolute left-2.5 top-2 text-xs text-slate-400">🔍</span>
+        </div>
+
+        <button
+          type="button"
+          onclick="window.StudioApp.triggerImportProject()"
+          class="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold text-xs flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+          title="Gesichertes Projekt (JSON) importieren"
+        >
+          <span>📂</span>
+          <span class="hidden md:inline">Importieren</span>
+        </button>
+
+        <button
+          type="button"
+          onclick="window.StudioApp.openCreateProjectModal()"
+          class="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs flex items-center gap-1.5 shadow-md shadow-blue-500/20 transition cursor-pointer"
+        >
+          <span>➕</span>
+          <span>Neues Projekt</span>
+        </button>
+
+        <div class="w-px h-5 bg-slate-200 dark:bg-slate-700 mx-1"></div>
+
+        <button
+          type="button"
+          onclick="window.StudioApp.toggleTheme()"
+          class="w-8 h-8 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center text-xs text-slate-600 dark:text-slate-300 shadow-sm cursor-pointer"
+          title="Farbschema umschalten"
+        >
+          🌓
+        </button>
+
+        <button
+          type="button"
+          onclick="window.StudioApp.handleLogout()"
+          class="w-8 h-8 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-red-50 dark:hover:bg-red-950/40 flex items-center justify-center text-xs text-slate-500 hover:text-red-500 shadow-sm cursor-pointer"
+          title="Abmelden"
+        >
+          🔒
+        </button>
+      </div>
+    </header>
+
+    <!-- Dashboard Content Area -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-6 md:p-8">
+      <div class="flex items-center justify-between mb-6">
+        <div>
+          <h2 class="text-xl font-bold text-slate-900 dark:text-slate-100">Deine Projekte</h2>
+          <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Wähle ein Projekt aus oder erstelle einen neuen Wissens-Workspace.</p>
+        </div>
+        <span id="projectCountBadge" class="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+          0 Projekte
+        </span>
+      </div>
+
+      <!-- Project Cards Grid -->
+      <div id="projectGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"></div>
+
+      <!-- Empty State -->
+      <div id="dashboardEmptyState" class="hidden text-center py-16 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-3xl p-8">
+        <div class="w-16 h-16 mx-auto mb-4 rounded-2xl bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 flex items-center justify-center text-3xl">
+          🧠
+        </div>
+        <h3 class="text-base font-bold text-slate-900 dark:text-slate-100 mb-1">Noch keine Projekte vorhanden</h3>
+        <p class="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto mb-5 leading-relaxed">
+          Lege dein erstes Projekt an oder importiere eine bestehende Mindmap-Datei, um direkt loszulegen.
+        </p>
+        <div class="flex items-center justify-center gap-3">
+          <button
+            type="button"
+            onclick="window.StudioApp.openCreateProjectModal()"
+            class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-md transition cursor-pointer"
+          >
+            ➕ Erstes Projekt erstellen
+          </button>
+          <button
+            type="button"
+            onclick="window.StudioApp.triggerImportProject()"
+            class="px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 font-semibold text-xs shadow-sm transition cursor-pointer"
+          >
+            📂 JSON importieren
+          </button>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- 2. WORKSPACE VIEW (PROJEKT-ARBEITSBEREICH: MINDMAP / DOKUMENTE / TASKS) -->
+  <!-- ========================================================================= -->
+  <div id="workspaceView" class="h-full flex flex-col hidden">
+    <!-- Workspace Top Header Bar -->
+    <header class="bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 z-30 px-4 py-2.5 flex items-center justify-between gap-3 shrink-0">
+      <!-- Left: Back Button & Title -->
+      <div class="flex items-center gap-3 min-w-0">
+        <button
+          type="button"
+          onclick="window.StudioApp.showDashboard()"
+          class="px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs flex items-center gap-1.5 shadow-sm transition cursor-pointer shrink-0"
+          title="Zurück zum Dashboard"
+        >
+          <span>←</span>
+          <span class="hidden sm:inline">Alle Projekte</span>
+        </button>
+
+        <div class="flex items-center gap-2 min-w-0">
+          <span id="workspaceProjectIcon" class="text-xl shrink-0">🧠</span>
+          <h2 id="workspaceProjectTitle" class="font-extrabold text-sm sm:text-base text-slate-900 dark:text-slate-100 truncate">
+            Projektname
+          </h2>
+        </div>
+      </div>
+
+      <!-- Center: View Switcher (Mindmap vs. Dokumente) -->
+      <div class="flex items-center p-0.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs shrink-0">
+        <button
+          type="button"
+          id="btnTabMindmap"
+          onclick="window.StudioApp.switchWorkspaceTab('mindmap')"
+          class="px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition cursor-pointer bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm"
+        >
+          <span>🧠</span>
+          <span>Mindmap</span>
+        </button>
+        <button
+          type="button"
+          id="btnTabDocs"
+          onclick="window.StudioApp.switchWorkspaceTab('docs')"
+          class="px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5 transition cursor-pointer text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+        >
+          <span>📚</span>
+          <span>Dokumente</span>
+        </button>
+      </div>
+
+      <!-- Right: Action Icons & Tasks Drawer Toggle -->
+      <div class="flex items-center gap-2 shrink-0">
+        <button
+          type="button"
+          onclick="window.StudioApp.Mindmap?.autoArrangeNodes()"
+          class="px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold text-xs flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+          title="Knoten automatisch mit passendem Abstand anordnen"
+        >
+          <span>📐</span>
+          <span class="hidden lg:inline">Auto-Layout</span>
+        </button>
+
+        <button
+          type="button"
+          onclick="window.StudioApp.openBackupsModal()"
+          class="w-8 h-8 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center text-xs text-slate-700 dark:text-slate-300 shadow-sm cursor-pointer"
+          title="Versions-Historie &amp; Backups"
+        >
+          🕒
+        </button>
+
+        <button
+          type="button"
+          onclick="window.StudioApp.Team?.openModal()"
+          class="w-8 h-8 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center text-xs text-slate-700 dark:text-slate-300 shadow-sm cursor-pointer"
+          title="Teammitglieder verwalten"
+        >
+          👥
+        </button>
+
+        <button
+          type="button"
+          onclick="window.StudioApp.exportProject(window.StudioApp.activeProjectId)"
+          class="w-8 h-8 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center text-xs text-slate-700 dark:text-slate-300 shadow-sm cursor-pointer"
+          title="Projekt als JSON sichern"
+        >
+          💾
+        </button>
+
+        <div class="w-px h-5 bg-slate-200 dark:bg-slate-700 mx-0.5"></div>
+
+        <!-- Tasks Drawer Toggle -->
+        <button
+          type="button"
+          onclick="window.StudioApp.Tasks?.toggleSidebar()"
+          class="px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold text-xs flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+          title="Aufgaben &amp; Notizen anzeigen"
+        >
+          <span>📝</span>
+          <span class="hidden md:inline">Aufgaben</span>
+          <span id="tasksCounterBadge" class="bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-bold px-1.5 py-0.2 rounded-full text-[10px]">0</span>
+        </button>
+
+        <button
+          type="button"
+          onclick="window.StudioApp.toggleTheme()"
+          class="w-8 h-8 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center text-xs text-slate-600 dark:text-slate-300 shadow-sm cursor-pointer"
+          title="Theme wechseln"
+        >
+          🌓
+        </button>
+      </div>
+    </header>
+
+    <!-- Workspace Main Body (Split between Canvas/Docs and Task Sidebar) -->
+    <div class="flex-1 flex overflow-hidden relative">
+
+      <!-- View Option A: Mindmap Canvas -->
+      <div id="workspaceMindmapView" class="flex-1 relative overflow-hidden canvas-grid bg-slate-50 dark:bg-slate-950">
+        <!-- Floating Canvas Controls -->
+        <div class="absolute bottom-6 right-6 z-20 flex flex-col gap-2">
+          <button
+            type="button"
+            onclick="window.StudioApp.Mindmap?.zoomIn()"
+            class="w-9 h-9 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-md flex items-center justify-center text-sm font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer"
+            title="Vergrößern"
+          >
+            +
+          </button>
+          <button
+            type="button"
+            onclick="window.StudioApp.Mindmap?.zoomOut()"
+            class="w-9 h-9 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-md flex items-center justify-center text-sm font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer"
+            title="Verkleinern"
+          >
+            −
+          </button>
+          <button
+            type="button"
+            onclick="window.StudioApp.Mindmap?.centerView()"
+            class="w-9 h-9 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-md flex items-center justify-center text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer"
+            title="Auf Zentrum ausrichten"
+          >
+            🎯
+          </button>
+        </div>
+
+        <!-- Interactive Canvas Stage -->
+        <div id="canvasContainer" class="w-full h-full cursor-default select-none relative overflow-hidden">
+          <div id="canvasLayer" class="absolute inset-0 origin-top-left pointer-events-none">
+            <!-- SVG Connections Layer -->
+            <svg id="connectionsSvg" class="absolute inset-0 w-[8000px] h-[8000px] pointer-events-none overflow-visible"></svg>
+            <!-- HTML Nodes Layer -->
+            <div id="nodesLayer" class="absolute inset-0 pointer-events-auto"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- View Option B: Document Split View -->
+      <div id="workspaceDocsView" class="flex-1 flex overflow-hidden hidden bg-slate-100 dark:bg-slate-950">
+        <!-- Left: Document List Sidebar -->
+        <div class="w-80 md:w-96 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col shrink-0">
+          <div class="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2">
+            <h3 class="font-bold text-xs uppercase tracking-wider text-slate-700 dark:text-slate-300">Projekt-Dokumente</h3>
+            <button
+              type="button"
+              onclick="window.StudioApp.Documents?.openUploadModal()"
+              class="px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs flex items-center gap-1 shadow-sm cursor-pointer"
+            >
+              <span>➕</span><span>Hochladen</span>
+            </button>
+          </div>
+          <!-- Document Search -->
+          <div class="p-3 border-b border-slate-200 dark:border-slate-800">
+            <input
+              type="text"
+              placeholder="Dokumente filtern..."
+              oninput="window.StudioApp.Documents?.setSearchQuery(this.value)"
+              class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:border-blue-500"
+            />
+          </div>
+          <!-- Document List Items -->
+          <div id="docList" class="flex-1 overflow-y-auto p-3 space-y-2"></div>
+        </div>
+
+        <!-- Right: Active Document Viewer -->
+        <div id="docViewerContainer" class="flex-1 bg-white dark:bg-slate-900 overflow-hidden flex flex-col">
+          <div class="h-full flex flex-col items-center justify-center text-slate-400 text-xs">
+            <span class="text-3xl mb-2">📚</span>
+            <p>Wähle links ein Dokument aus.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Collapsible Right Sidebar: Tasks & Notes -->
+      <aside id="tasksSidebar" class="hidden w-80 md:w-96 border-l border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col shrink-0 h-full z-20">
+        <!-- Sidebar Header -->
+        <div class="p-3.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-950 shrink-0">
+          <div class="flex items-center gap-2">
+            <span class="text-base">📝</span>
+            <h3 class="font-bold text-xs uppercase tracking-wider text-slate-700 dark:text-slate-300">Aufgaben &amp; Notizen</h3>
+          </div>
+          <button
+            type="button"
+            onclick="window.StudioApp.Tasks?.toggleSidebar()"
+            class="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 cursor-pointer"
+            title="Schließen"
+          >
+            ✕
+          </button>
+        </div>
+
+        <!-- Filter & Progress Row -->
+        <div class="px-3 py-2 bg-slate-50 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs gap-2 shrink-0">
+          <div class="flex items-center gap-1.5 flex-1 min-w-0">
+            <span class="text-slate-400 text-[11px] shrink-0">Filter:</span>
+            <select
+              id="taskFilterAssignee"
+              onchange="window.StudioApp.Tasks?.setFilter(this.value)"
+              class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-700 dark:text-slate-200 focus:outline-none focus:border-blue-500"
+            >
+              <option value="all">Alle Aufgaben</option>
+              <option value="unassigned">👤 Nicht zugewiesen</option>
+            </select>
+          </div>
+          <span id="tasksProgressText" class="font-bold text-blue-600 dark:text-blue-400 text-[11px] shrink-0">0 von 0 erledigt</span>
+        </div>
+
+        <!-- Task List Items -->
+        <div id="taskList" class="flex-1 overflow-y-auto p-3 space-y-2.5"></div>
+
+        <!-- New Task Form -->
+        <div class="p-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 shrink-0 space-y-2">
+          <div class="flex items-center gap-2">
+            <input
+              id="newTaskInput"
+              type="text"
+              placeholder="Neue Aufgabe / Notiz eintragen..."
+              class="flex-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-blue-500"
+              onkeydown="if(event.key === 'Enter') window.StudioApp.Tasks?.addTask()"
+            />
+            <button
+              type="button"
+              onclick="window.StudioApp.Tasks?.addTask()"
+              class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shrink-0 shadow-sm cursor-pointer"
+            >
+              +
+            </button>
+          </div>
+          <div class="flex items-center justify-between text-xs gap-2">
+            <span class="text-slate-500 dark:text-slate-400 text-[11px] shrink-0">Zuweisen an:</span>
+            <select
+              id="newTaskAssignee"
+              class="flex-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-700 dark:text-slate-200 focus:outline-none focus:border-blue-500"
+            >
+              <option value="">👤 Niemand (Offen)</option>
+            </select>
+          </div>
+        </div>
+      </aside>
+
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- 3. ALL APPLICATION MODALS -->
+  <!-- ========================================================================= -->
+
+  <!-- AUTHENTICATION / LOGIN MODAL -->
+  <div id="loginModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md hidden">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl max-w-sm w-full p-6 border border-slate-200 dark:border-slate-700 shadow-2xl">
+      <div class="text-center mb-5">
+        <div class="w-12 h-12 mx-auto mb-3 rounded-2xl bg-blue-100 dark:bg-blue-950/80 text-blue-600 dark:text-blue-400 flex items-center justify-center text-2xl shadow-inner">
+          🔒
+        </div>
+        <h2 class="text-lg font-bold text-slate-900 dark:text-slate-100">Mindmap Studio Login</h2>
+        <p class="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">Bitte gib das Server-Passwort ein, um Zugriff auf die Projekte zu erhalten.</p>
+      </div>
+      <form onsubmit="window.StudioApp.handleLogin(event)" class="space-y-4">
+        <div>
+          <label for="loginPasswordInput" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Passwort</label>
+          <input
+            type="password"
+            id="loginPasswordInput"
+            placeholder="Passwort eingeben..."
+            required
+            autocomplete="current-password"
+            class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500"
+          />
+        </div>
+        <div id="loginErrorMsg" class="hidden text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 p-2.5 rounded-xl border border-red-200 dark:border-red-900 text-center font-medium"></div>
+        <button
+          type="submit"
+          id="loginSubmitBtn"
+          class="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-md transition flex items-center justify-center gap-2 cursor-pointer"
+        >
+          <span>Anmelden</span>
+          <span>→</span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- PROJECT CREATE / EDIT MODAL -->
+  <div id="projectModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm hidden">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full p-6 border border-slate-200 dark:border-slate-700 shadow-2xl">
+      <div class="flex items-center justify-between mb-4">
+        <h3 id="projectModalHeading" class="font-bold text-base text-slate-900 dark:text-slate-100">Neues Projekt anlegen</h3>
+        <button type="button" onclick="window.StudioApp.closeProjectModal()" class="text-slate-400 hover:text-slate-600 text-xs p-1">✕</button>
+      </div>
+      <form onsubmit="window.StudioApp.saveProjectFromModal(event)" class="space-y-3.5">
+        <input type="hidden" id="projFormId" />
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Projekttitel *</label>
+          <input
+            type="text"
+            id="projFormTitle"
+            placeholder="z.B. Multimodale Schlafapnoe-Detektion"
+            required
+            class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500"
+          />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Untertitel (optional)</label>
+          <input
+            type="text"
+            id="projFormSubtitle"
+            placeholder="z.B. Teamprojekt AIN7 Wintersemester"
+            class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500"
+          />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Beschreibung</label>
+          <textarea
+            id="projFormDesc"
+            rows="2"
+            placeholder="Kurze Projektbeschreibung..."
+            class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500"
+          ></textarea>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Icon (Emoji)</label>
+          <input
+            type="text"
+            id="projFormIcon"
+            value="🧠"
+            class="w-20 text-center bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl px-2 py-1.5 text-sm"
+          />
+        </div>
+        <div class="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-2">
+          <button type="button" onclick="window.StudioApp.closeProjectModal()" class="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-800">
+            Abbrechen
+          </button>
+          <button type="submit" class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-md">
+            Speichern
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- NODE DETAIL VIEW MODAL -->
+  <div id="nodeDetailModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm hidden">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl max-w-xl w-full max-h-[85vh] flex flex-col border border-slate-200 dark:border-slate-700 shadow-2xl overflow-hidden">
+      <div class="p-4 border-b border-slate-200 dark:border-slate-800 flex items-start justify-between gap-3 bg-slate-50 dark:bg-slate-950">
+        <div>
+          <span class="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider block mb-0.5">Knoten-Details</span>
+          <h3 id="modalDetailTitle" class="font-bold text-base text-slate-900 dark:text-slate-100">Titel</h3>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <button type="button" onclick="window.StudioApp.Mindmap?.openEditActiveNode()" class="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold flex items-center gap-1">
+            ✏️ Bearbeiten
+          </button>
+          <button type="button" onclick="window.StudioApp.Mindmap?.closeNodeDetailModal()" class="w-7 h-7 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 text-xs">✕</button>
+        </div>
+      </div>
+      <div class="p-5 overflow-y-auto space-y-4 text-xs">
+        <div>
+          <h4 class="font-bold text-slate-500 uppercase text-[10px] mb-1">Zuständigkeit</h4>
+          <div id="modalDetailAssignee"></div>
+        </div>
+        <div>
+          <h4 class="font-bold text-slate-500 uppercase text-[10px] mb-1">Beschreibung &amp; Details</h4>
+          <p id="modalDetailText" class="text-slate-700 dark:text-slate-300 leading-relaxed bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-100 dark:border-slate-800"></p>
+        </div>
+        <div>
+          <h4 class="font-bold text-slate-500 uppercase text-[10px] mb-1">Wichtige Aspekte</h4>
+          <ul id="modalDetailBullets" class="space-y-1.5 text-slate-700 dark:text-slate-300"></ul>
+        </div>
+        <div>
+          <h4 class="font-bold text-slate-500 uppercase text-[10px] mb-1">Literatur &amp; Nachweise</h4>
+          <p id="modalDetailLiterature" class="text-slate-600 dark:text-slate-400 italic"></p>
+        </div>
+      </div>
+      <div class="p-3 border-t border-slate-200 dark:border-slate-800 flex justify-between bg-slate-50 dark:bg-slate-950">
+        <button type="button" onclick="window.StudioApp.Mindmap?.deleteActiveNode()" class="px-3 py-1.5 rounded-lg text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 text-xs font-semibold">
+          🗑️ Knoten löschen
+        </button>
+        <button type="button" onclick="window.StudioApp.Mindmap?.closeNodeDetailModal()" class="px-3 py-1.5 rounded-lg bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-xs font-semibold">
+          Schließen
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- NODE EDIT / CREATE MODAL -->
+  <div id="nodeEditModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm hidden">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full p-6 border border-slate-200 dark:border-slate-700 shadow-2xl">
+      <div class="flex items-center justify-between mb-4">
+        <h3 id="nodeEditModalTitle" class="font-bold text-base text-slate-900 dark:text-slate-100">Knoten bearbeiten</h3>
+        <button type="button" onclick="document.getElementById('nodeEditModal').classList.add('hidden')" class="text-slate-400 hover:text-slate-600 text-xs p-1">✕</button>
+      </div>
+      <form onsubmit="event.preventDefault(); window.StudioApp.Mindmap?.saveNodeFromForm();" class="space-y-3">
+        <input type="hidden" id="editNodeId" />
+        <input type="hidden" id="editNodeParentId" />
+        <input type="hidden" id="editNodeSide" />
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Titel *</label>
+          <input
+            type="text"
+            id="editNodeTitle"
+            required
+            class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500"
+          />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Kurzbeschreibung</label>
+          <input
+            type="text"
+            id="editNodeDesc"
+            class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500"
+          />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Ausführliche Details</label>
+          <textarea
+            id="editNodeDetails"
+            rows="3"
+            class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500"
+          ></textarea>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Zuständigkeit (Team)</label>
+            <select
+              id="editNodeAssignee"
+              class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500"
+            ></select>
+          </div>
+          <div class="flex items-center pt-5">
+            <label class="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700 dark:text-slate-300">
+              <input type="checkbox" id="editNodeFavorite" class="w-4 h-4 rounded text-blue-600 focus:ring-blue-500" />
+              <span>Als Favorit markieren ⭐</span>
+            </label>
+          </div>
+        </div>
+        <div class="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-2">
+          <button type="button" onclick="document.getElementById('nodeEditModal').classList.add('hidden')" class="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold">
+            Abbrechen
+          </button>
+          <button type="submit" class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-md">
+            Speichern
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- TEAM MANAGEMENT MODAL -->
+  <div id="teamModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm hidden">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full p-6 border border-slate-200 dark:border-slate-700 shadow-2xl">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="font-bold text-base text-slate-900 dark:text-slate-100">Teammitglieder verwalten</h3>
+        <button type="button" onclick="window.StudioApp.Team?.closeModal()" class="text-slate-400 hover:text-slate-600 text-xs p-1">✕</button>
+      </div>
+      <!-- Add Member Form -->
+      <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-2.5 mb-4">
+        <span class="font-bold text-xs uppercase tracking-wider text-slate-500">Neues Mitglied anlegen</span>
+        <div class="flex items-center gap-2">
+          <input
+            type="text"
+            id="newTeamMemberName"
+            placeholder="Name eingeben (z.B. Laurin)..."
+            class="flex-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-blue-500"
+            onkeydown="if(event.key === 'Enter') window.StudioApp.Team?.addMember()"
+          />
+          <button
+            type="button"
+            onclick="window.StudioApp.Team?.addMember()"
+            class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-sm cursor-pointer"
+          >
+            Hinzufügen
+          </button>
+        </div>
+        <div class="flex items-center gap-2 pt-1">
+          <span class="text-[11px] text-slate-400">Farbe:</span>
+          <div id="teamColorPalette" class="flex items-center gap-2"></div>
+        </div>
+      </div>
+      <!-- Members List -->
+      <div class="space-y-1 mb-4">
+        <span class="font-bold text-xs uppercase tracking-wider text-slate-500">Aktuelle Mitglieder</span>
+        <div id="teamMembersList" class="max-h-56 overflow-y-auto space-y-2 pt-1.5"></div>
+      </div>
+      <div class="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-end">
+        <button type="button" onclick="window.StudioApp.Team?.closeModal()" class="px-4 py-2 rounded-xl bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-xs font-semibold">
+          Fertig
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- DOCUMENT UPLOAD MODAL -->
+  <div id="docUploadModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm hidden">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full p-6 border border-slate-200 dark:border-slate-700 shadow-2xl">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="font-bold text-base text-slate-900 dark:text-slate-100">Dokument hochladen</h3>
+        <button type="button" onclick="window.StudioApp.Documents?.closeUploadModal()" class="text-slate-400 hover:text-slate-600 text-xs p-1">✕</button>
+      </div>
+      <form onsubmit="window.StudioApp.Documents?.handleUploadSubmit(event)" class="space-y-3.5">
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Datei auswählen (PDF, Markdown, Excel, Text max. 25 MB)</label>
+          <input
+            type="file"
+            id="uploadFileInput"
+            required
+            class="w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-600 dark:file:bg-blue-950 dark:file:text-blue-400 hover:file:bg-blue-100 cursor-pointer"
+          />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Titel (optional)</label>
+          <input
+            type="text"
+            id="uploadDocTitle"
+            placeholder="Standardmäßig Dateiname"
+            class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500"
+          />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Kategorie</label>
+          <input
+            type="text"
+            id="uploadDocCategory"
+            value="Eigene Uploads"
+            class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500"
+          />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Notiz / Beschreibung</label>
+          <textarea
+            id="uploadDocDesc"
+            rows="2"
+            placeholder="Worum geht es in diesem Dokument..."
+            class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500"
+          ></textarea>
+        </div>
+        <div id="uploadStatusMsg" class="hidden text-xs"></div>
+        <div class="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-2">
+          <button type="button" onclick="window.StudioApp.Documents?.closeUploadModal()" class="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold">
+            Abbrechen
+          </button>
+          <button type="submit" id="uploadSubmitBtn" class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-md">
+            Hochladen
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- BACKUPS & REVISIONS MODAL -->
+  <div id="backupsModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm hidden">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full max-h-[85vh] flex flex-col border border-slate-200 dark:border-slate-700 shadow-2xl overflow-hidden">
+      <div class="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-950">
+        <div class="flex items-center gap-2">
+          <span class="text-base">🕒</span>
+          <h3 class="font-bold text-sm text-slate-900 dark:text-slate-100">Versions-Historie &amp; Snapshots</h3>
+        </div>
+        <button type="button" onclick="window.StudioApp.closeBackupsModal()" class="text-slate-400 hover:text-slate-600 text-xs p-1">✕</button>
+      </div>
+      <div id="backupsList" class="p-4 overflow-y-auto space-y-2.5 flex-1"></div>
+      <div class="p-3 border-t border-slate-100 dark:border-slate-800 flex justify-end bg-slate-50 dark:bg-slate-950">
+        <button type="button" onclick="window.StudioApp.closeBackupsModal()" class="px-4 py-2 rounded-xl bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-xs font-semibold">
+          Schließen
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hidden Import Input -->
+  <input type="file" id="importProjectFileInput" accept=".json" class="hidden" onchange="window.StudioApp.handleImportFile(event)" />
+
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- Modular ES6 Application Script -->
+  <script type="module" src="/static/js/app.js"></script>
+</body>
+</html>

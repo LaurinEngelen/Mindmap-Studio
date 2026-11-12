@@ -1,0 +1,34 @@
+services:
+  mindmap-studio:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mindmap-studio:latest
+    container_name: mindmap-studio
+    restart: unless-stopped
+    user: "1000:1000"
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - AUTH_ENABLED=true
+      - APP_PASSWORD=studio-team-2026!
+      - SESSION_SECRET=mindmap-studio-secure-salt-2026
+      - MAX_UPLOAD_MB=25
+      - HOST=0.0.0.0
+      - PORT=8080
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/api/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - studio-net
+
+networks:
+  studio-net:
+    driver: bridge
