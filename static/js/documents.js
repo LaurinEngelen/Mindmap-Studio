@@ -49,32 +49,55 @@ export const Documents = {
       return;
     }
 
-    list.innerHTML = filtered.map(d => {
-      const isSelected = d.id === this.selectedDocId;
-      return `
-        <div
-          onclick="window.StudioApp.selectDocument('${d.id}')"
-          class="p-3 rounded-xl border transition-all cursor-pointer flex items-start justify-between gap-2.5 ${
-            isSelected
-              ? "bg-blue-50 dark:bg-blue-950/40 border-blue-300 dark:border-blue-800 shadow-sm"
-              : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700"
-          }"
-        >
-          <div class="flex items-start gap-2.5 min-w-0">
-            <span class="text-lg shrink-0">${d.icon || '📄'}</span>
-            <div class="min-w-0">
-              <h4 class="font-bold text-xs text-slate-900 dark:text-slate-100 truncate">${escapeHtml(d.title)}</h4>
-              <p class="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">${escapeHtml(d.category || 'Allgemein')}</p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onclick="event.stopPropagation(); window.StudioApp.deleteDocument('${d.id}')"
-            class="text-slate-400 hover:text-red-500 text-xs p-1 cursor-pointer shrink-0"
-            title="Dokument löschen"
+    // Group and sort documents by category, then alphabetically by title
+    const grouped = new Map();
+    for (const d of filtered) {
+      const cat = (d.category || "").trim() || "Allgemein";
+      if (!grouped.has(cat)) grouped.set(cat, []);
+      grouped.get(cat).push(d);
+    }
+
+    const sortedCategories = Array.from(grouped.keys()).sort((a, b) => a.localeCompare(b, "de"));
+
+    list.innerHTML = sortedCategories.map(cat => {
+      const items = grouped.get(cat).sort((a, b) => (a.title || "").localeCompare(b.title || "", "de"));
+      const cardsHtml = items.map(d => {
+        const isSelected = d.id === this.selectedDocId;
+        return `
+          <div
+            onclick="window.StudioApp.selectDocument('${d.id}')"
+            class="p-3 rounded-xl border transition-all cursor-pointer flex items-start justify-between gap-2.5 ${
+              isSelected
+                ? "bg-blue-50 dark:bg-blue-950/40 border-blue-300 dark:border-blue-800 shadow-sm"
+                : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700"
+            }"
           >
-            ✕
-          </button>
+            <div class="flex items-start gap-2.5 min-w-0">
+              <span class="text-lg shrink-0">${d.icon || '📄'}</span>
+              <div class="min-w-0">
+                <h4 class="font-bold text-xs text-slate-900 dark:text-slate-100 truncate">${escapeHtml(d.title)}</h4>
+                <p class="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">${escapeHtml(d.category || 'Allgemein')}</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onclick="event.stopPropagation(); window.StudioApp.deleteDocument('${d.id}')"
+              class="text-slate-400 hover:text-red-500 text-xs p-1 cursor-pointer shrink-0"
+              title="Dokument löschen"
+            >
+              ✕
+            </button>
+          </div>
+        `;
+      }).join("");
+
+      return `
+        <div class="space-y-1.5">
+          <div class="px-1 pt-2 pb-0.5 flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+            <span>📁 ${escapeHtml(cat)}</span>
+            <span class="bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded-full text-[9px]">${items.length}</span>
+          </div>
+          ${cardsHtml}
         </div>
       `;
     }).join("");
