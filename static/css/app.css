@@ -23,15 +23,22 @@
 .mindmap-node {
   user-select: none;
   touch-action: none;
-  transition: transform 0.05s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
 }
 
 .mindmap-node.is-dragging {
   cursor: grabbing !important;
+  transition: none !important;
   opacity: 0.95;
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.1);
-  transform: scale(1.02);
   z-index: 100 !important;
+}
+
+.mindmap-node.is-selected {
+  outline: 3px solid #3b82f6 !important;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 6px rgba(59, 130, 246, 0.25), 0 10px 25px -5px rgba(0, 0, 0, 0.2) !important;
+  z-index: 30 !important;
 }
 
 /* Custom Scrollbars */

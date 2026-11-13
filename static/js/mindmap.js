@@ -31,16 +31,23 @@ export const Mindmap = {
   isPanning: false,
   startPan: { x: 0, y: 0 },
 
+  // Marquee Box Selection (Shift + Drag on background)
+  isBoxSelecting: false,
+  boxStart: { x: 0, y: 0 },
+  boxInitialSelection: new Set(),
+
   // Node Dragging & Multi-selection
   draggedNodeId: null,
   dragOffset: { x: 0, y: 0 },
   dragStartCoords: { x: 0, y: 0 },
   dragStartNodePos: { x: 0, y: 0 },
   hasDragged: false,
+  isShiftPressed: false,
   isShiftDragging: false,
-  draggedDescendantIds: null,
-  initialDescendantPositions: null,
+  shiftDescendantsAdded: false,
+  coMovedInitialPositions: new Map(),
   selectedNodeIds: new Set(),
+  _eventsBound: false,
   activeNodeData: null,
 
   init(projectId, projectData) {
@@ -51,9 +58,10 @@ export const Mindmap = {
     this.spacing = projectData.spacing || { x: 350, y: 80 };
     this.selectedNodeIds = new Set();
     this.draggedNodeId = null;
+    this.isBoxSelecting = false;
     this.isShiftDragging = false;
-    this.draggedDescendantIds = null;
-    this.initialDescendantPositions = null;
+    this.shiftDescendantsAdded = false;
+    this.coMovedInitialPositions = new Map();
 
     this.scale = 1.0;
     this.panX = 0;
@@ -92,9 +100,9 @@ export const Mindmap = {
     document.querySelectorAll(".mindmap-node").forEach(el => {
       const nid = el.dataset.nodeId;
       if (this.selectedNodeIds.has(nid)) {
-        el.classList.add("ring-4", "ring-blue-500", "ring-offset-2", "dark:ring-offset-slate-900", "shadow-xl", "z-30");
+        el.classList.add("is-selected");
       } else {
-        el.classList.remove("ring-4", "ring-blue-500", "ring-offset-2", "dark:ring-offset-slate-900", "shadow-xl", "z-30");
+        el.classList.remove("is-selected");
       }
     });
   },
@@ -145,31 +153,117 @@ export const Mindmap = {
     return ids;
   },
 
+  addCoMovedNodes(nodeIds, dx = 0, dy = 0) {
+    for (const cid of nodeIds) {
+      if (cid === this.draggedNodeId || this.coMovedInitialPositions.has(cid)) continue;
+      const chEl = document.getElementById(`node_${cid}`);
+      const cx = chEl ? parseFloat(chEl.style.left) || 0 : (this.positions[cid]?.x || 0);
+      const cy = chEl ? parseFloat(chEl.style.top) || 0 : (this.positions[cid]?.y || 0);
+      this.coMovedInitialPositions.set(cid, { x: cx - dx, y: cy - dy });
+      chEl?.classList.add("is-dragging");
+    }
+  },
+
   setupCanvasEvents() {
     const container = document.getElementById("canvasContainer");
     if (!container) return;
 
-    // Pan with mouse drag on background
+    // Pan or Box-Select with mouse drag on background
     container.onpointerdown = (e) => {
       if (e.target.closest(".mindmap-node") || e.target.closest("button") || e.target.closest("input")) {
         return;
       }
-      if (!e.shiftKey) {
-        this.clearSelection();
+      const shiftActive = e.shiftKey || this.isShiftPressed;
+      if (shiftActive) {
+        // Start marquee box selection
+        const rect = container.getBoundingClientRect();
+        this.isBoxSelecting = true;
+        this.boxStart = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+        this.boxInitialSelection = new Set(this.selectedNodeIds);
+        const box = document.getElementById("selectionBox");
+        if (box) {
+          box.style.left = `${this.boxStart.x}px`;
+          box.style.top = `${this.boxStart.y}px`;
+          box.style.width = "0px";
+          box.style.height = "0px";
+          box.classList.remove("hidden");
+        }
+        return;
       }
+
+      this.clearSelection();
       this.isPanning = true;
       this.startPan = { x: e.clientX - this.panX, y: e.clientY - this.panY };
       container.style.cursor = "grabbing";
     };
 
+    // Zoom on wheel
+    container.onwheel = (e) => {
+      e.preventDefault();
+      const rect = container.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      const zoomFactor = e.deltaY < 0 ? 1.12 : 0.89;
+      const newScale = Math.min(Math.max(this.scale * zoomFactor, 0.25), 2.5);
+
+      this.panX = mouseX - (mouseX - this.panX) * (newScale / this.scale);
+      this.panY = mouseY - (mouseY - this.panY) * (newScale / this.scale);
+      this.scale = newScale;
+      this.updateTransform();
+    };
+
+    if (this._eventsBound) return;
+    this._eventsBound = true;
+
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "Shift") this.isShiftPressed = true;
+    });
+    window.addEventListener("keyup", (e) => {
+      if (e.key === "Shift") this.isShiftPressed = false;
+    });
+    window.addEventListener("blur", () => {
+      this.isShiftPressed = false;
+    });
+
     window.addEventListener("pointermove", (e) => {
+      if (this.isBoxSelecting) {
+        const cont = document.getElementById("canvasContainer");
+        const box = document.getElementById("selectionBox");
+        if (cont && box) {
+          const rect = cont.getBoundingClientRect();
+          const curX = e.clientX - rect.left;
+          const curY = e.clientY - rect.top;
+          const left = Math.min(this.boxStart.x, curX);
+          const top = Math.min(this.boxStart.y, curY);
+          const width = Math.abs(curX - this.boxStart.x);
+          const height = Math.abs(curY - this.boxStart.y);
+          box.style.left = `${left}px`;
+          box.style.top = `${top}px`;
+          box.style.width = `${width}px`;
+          box.style.height = `${height}px`;
+
+          const boxRect = box.getBoundingClientRect();
+          this.selectedNodeIds = new Set(this.boxInitialSelection);
+          document.querySelectorAll(".mindmap-node").forEach(nodeEl => {
+            const nr = nodeEl.getBoundingClientRect();
+            const intersects = !(nr.right < boxRect.left || nr.left > boxRect.right || nr.bottom < boxRect.top || nr.top > boxRect.bottom);
+            if (intersects) {
+              this.selectedNodeIds.add(nodeEl.dataset.nodeId);
+            }
+          });
+          this.updateSelectionStyles();
+        }
+        return;
+      }
+
       if (this.isPanning) {
         this.panX = e.clientX - this.startPan.x;
         this.panY = e.clientY - this.startPan.y;
         this.updateTransform();
       } else if (this.draggedNodeId) {
         const dist = Math.hypot(e.clientX - this.dragStartCoords.x, e.clientY - this.dragStartCoords.y);
-        if (dist > 4) {
+        if (dist > 5) {
           this.hasDragged = true;
         }
 
@@ -184,23 +278,16 @@ export const Mindmap = {
           const dx = newX - this.dragStartNodePos.x;
           const dy = newY - this.dragStartNodePos.y;
 
-          // If user presses Shift during drag, dynamically initialize descendants if not already done
-          if (e.shiftKey && !this.draggedDescendantIds) {
+          // If user presses Shift during drag, dynamically add descendants
+          const shiftActive = e.shiftKey || this.isShiftPressed;
+          if (shiftActive && !this.shiftDescendantsAdded) {
+            this.shiftDescendantsAdded = true;
             this.isShiftDragging = true;
-            this.draggedDescendantIds = this.getDescendantIds(this.draggedNodeId);
-            this.initialDescendantPositions = {};
-            for (const cid of this.draggedDescendantIds) {
-              const chEl = document.getElementById(`node_${cid}`);
-              const cx = chEl ? parseFloat(chEl.style.left) || 0 : (this.positions[cid]?.x || 0);
-              const cy = chEl ? parseFloat(chEl.style.top) || 0 : (this.positions[cid]?.y || 0);
-              this.initialDescendantPositions[cid] = { x: cx - dx, y: cy - dy };
-            }
+            this.addCoMovedNodes(this.getDescendantIds(this.draggedNodeId), dx, dy);
           }
 
-          if (this.isShiftDragging && this.draggedDescendantIds && this.draggedDescendantIds.length > 0) {
-            for (const cid of this.draggedDescendantIds) {
-              const init = this.initialDescendantPositions[cid];
-              if (!init) continue;
+          if (this.coMovedInitialPositions.size > 0) {
+            for (const [cid, init] of this.coMovedInitialPositions.entries()) {
               const chX = init.x + dx;
               const chY = init.y + dy;
               const childEl = document.getElementById(`node_${cid}`);
@@ -212,36 +299,52 @@ export const Mindmap = {
             }
           }
 
-          requestAnimationFrame(() => this.renderLines());
+          this.renderLines();
         }
       }
     });
 
-    window.addEventListener("pointerup", async (e) => {
+    window.addEventListener("pointerup", async () => {
+      if (this.isBoxSelecting) {
+        this.isBoxSelecting = false;
+        document.getElementById("selectionBox")?.classList.add("hidden");
+        return;
+      }
+
       if (this.isPanning) {
         this.isPanning = false;
-        container.style.cursor = "default";
+        const cont = document.getElementById("canvasContainer");
+        if (cont) cont.style.cursor = "default";
       }
+
       if (this.draggedNodeId) {
         const nodeId = this.draggedNodeId;
         const el = document.getElementById(`node_${nodeId}`);
         el?.classList.remove("is-dragging");
 
-        const wasShiftDragging = this.isShiftDragging && this.draggedDescendantIds && this.draggedDescendantIds.length > 0;
-        const descendantIds = this.draggedDescendantIds || [];
+        const coMovedIds = Array.from(this.coMovedInitialPositions.keys());
+        for (const cid of coMovedIds) {
+          document.getElementById(`node_${cid}`)?.classList.remove("is-dragging");
+        }
+
+        const hadCoMoved = coMovedIds.length > 0;
 
         this.draggedNodeId = null;
         this.isShiftDragging = false;
-        this.draggedDescendantIds = null;
-        this.initialDescendantPositions = null;
+        this.shiftDescendantsAdded = false;
+        this.coMovedInitialPositions.clear();
 
-        if (wasShiftDragging) {
+        if (!this.hasDragged) {
+          return;
+        }
+
+        if (hadCoMoved) {
           const batchUpdates = {};
           const parentPos = this.positions[nodeId];
           if (parentPos) {
             batchUpdates[nodeId] = { x: Math.round(parentPos.x), y: Math.round(parentPos.y) };
           }
-          for (const cid of descendantIds) {
+          for (const cid of coMovedIds) {
             const cPos = this.positions[cid];
             if (cPos) {
               batchUpdates[cid] = { x: Math.round(cPos.x), y: Math.round(cPos.y) };
@@ -269,22 +372,6 @@ export const Mindmap = {
         }
       }
     });
-
-    // Zoom on wheel
-    container.onwheel = (e) => {
-      e.preventDefault();
-      const rect = container.getBoundingClientRect();
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
-
-      const zoomFactor = e.deltaY < 0 ? 1.12 : 0.89;
-      const newScale = Math.min(Math.max(this.scale * zoomFactor, 0.25), 2.5);
-
-      this.panX = mouseX - (mouseX - this.panX) * (newScale / this.scale);
-      this.panY = mouseY - (mouseY - this.panY) * (newScale / this.scale);
-      this.scale = newScale;
-      this.updateTransform();
-    };
   },
 
   updateTransform() {
@@ -394,7 +481,7 @@ export const Mindmap = {
     if (isRoot) {
       div.className = "group mindmap-node absolute cursor-grab border rounded-2xl shadow-md transition-shadow select-none bg-blue-600 text-white border-blue-700 dark:border-blue-500 font-bold px-6 py-4 z-20 text-center min-w-[200px]";
     } else {
-      div.className = `group mindmap-node absolute cursor-grab border rounded-2xl shadow-sm hover:shadow-md transition-all select-none bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 border-slate-200 dark:border-slate-800 px-4 py-3 z-10 min-w-[170px] max-w-[280px] ${
+      div.className = `group mindmap-node absolute cursor-grab border rounded-2xl shadow-sm hover:shadow-md transition-shadow select-none bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 border-slate-200 dark:border-slate-800 px-4 py-3 z-10 min-w-[170px] max-w-[280px] ${
         isLeft ? "border-r-[3.5px]" : "border-l-[3.5px]"
       }`;
       div.style.setProperty(isLeft ? "border-right-color" : "border-left-color", branchColor);
@@ -425,20 +512,16 @@ export const Mindmap = {
         ${node.desc ? `<p class="text-[11px] line-clamp-2 ${isRoot ? 'text-blue-100' : 'text-slate-500 dark:text-slate-400'} leading-tight">${escapeHtml(node.desc)}</p>` : ''}
 
         ${isRoot ? `
-          <div class="mt-3 pt-2 border-t border-blue-500/50 flex items-center justify-center gap-2">
-            <button type="button" class="btn-add-left px-2 py-1 rounded-lg bg-blue-700/80 hover:bg-blue-800 text-white text-[11px] font-semibold flex items-center gap-1 shadow-xs cursor-pointer" title="Hauptzweig nach Links hinzufügen">
-              <span>➕</span><span>Links</span>
-            </button>
-            <button type="button" class="btn-add-right px-2 py-1 rounded-lg bg-blue-700/80 hover:bg-blue-800 text-white text-[11px] font-semibold flex items-center gap-1 shadow-xs cursor-pointer" title="Hauptzweig nach Rechts hinzufügen">
-              <span>➕</span><span>Rechts</span>
+          <div class="mt-3 pt-2 border-t border-blue-500/50 flex items-center justify-center">
+            <button type="button" class="btn-add-root w-7 h-7 rounded-lg bg-blue-700/80 hover:bg-blue-800 text-white text-sm font-bold flex items-center justify-center shadow-xs cursor-pointer transition hover:scale-105" title="Neuen Hauptzweig hinzufügen">
+              +
             </button>
           </div>
         ` : `
           <div class="mt-2 pt-1.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[10px] text-slate-400">
             <span>${(node.children || []).length > 0 ? `🌿 ${node.children.length}` : '•'}</span>
-            <button type="button" class="btn-add-sub px-2 py-0.5 rounded-lg font-bold text-[11px] flex items-center gap-1 cursor-pointer transition hover:scale-105" style="background-color: ${branchColor}18; color: ${branchColor}" title="Unterknoten anlegen">
-              <span>➕</span>
-              <span>Unterknoten</span>
+            <button type="button" class="btn-add-sub w-6 h-6 rounded-lg font-bold text-sm flex items-center justify-center cursor-pointer transition hover:scale-110" style="background-color: ${branchColor}18; color: ${branchColor}" title="Unterknoten anlegen">
+              +
             </button>
           </div>
         `}
@@ -450,10 +533,13 @@ export const Mindmap = {
       if (e.target.closest("button")) return;
       e.stopPropagation();
 
+      const shiftActive = e.shiftKey || this.isShiftPressed;
       this.draggedNodeId = node.id;
       this.dragStartCoords = { x: e.clientX, y: e.clientY };
       this.hasDragged = false;
-      this.isShiftDragging = e.shiftKey;
+      this.isShiftDragging = shiftActive;
+      this.shiftDescendantsAdded = false;
+      this.coMovedInitialPositions = new Map();
 
       div.classList.add("is-dragging");
 
@@ -465,29 +551,21 @@ export const Mindmap = {
         y: (e.clientY - this.panY) / this.scale - currentY
       };
 
-      if (this.isShiftDragging) {
-        this.draggedDescendantIds = this.getDescendantIds(node.id);
-        this.initialDescendantPositions = {};
-        for (const cid of this.draggedDescendantIds) {
-          const el = document.getElementById(`node_${cid}`);
-          const cx = el ? parseFloat(el.style.left) || 0 : (this.positions[cid]?.x || 0);
-          const cy = el ? parseFloat(el.style.top) || 0 : (this.positions[cid]?.y || 0);
-          this.initialDescendantPositions[cid] = { x: cx, y: cy };
-        }
-      } else {
-        this.draggedDescendantIds = null;
-        this.initialDescendantPositions = null;
+      // If dragging a selected node in a multi-selection, co-move all other selected nodes
+      if (this.selectedNodeIds.has(node.id) && this.selectedNodeIds.size > 1) {
+        this.addCoMovedNodes(Array.from(this.selectedNodeIds), 0, 0);
+      }
+
+      // If Shift is held, co-move all recursive descendants of the dragged node
+      if (shiftActive) {
+        this.shiftDescendantsAdded = true;
+        this.addCoMovedNodes(this.getDescendantIds(node.id), 0, 0);
       }
     });
 
     // Single click for selection or branch actions
     div.addEventListener("click", (e) => {
-      if (e.target.closest(".btn-add-left")) {
-        e.stopPropagation();
-        this.openCreateNodeModal("root", "left");
-        return;
-      }
-      if (e.target.closest(".btn-add-right")) {
+      if (e.target.closest(".btn-add-root")) {
         e.stopPropagation();
         this.openCreateNodeModal("root", "right");
         return;
@@ -501,12 +579,12 @@ export const Mindmap = {
         return;
       }
       e.stopPropagation();
-      this.toggleNodeSelection(node.id, e.shiftKey);
+      this.toggleNodeSelection(node.id, e.shiftKey || this.isShiftPressed);
     });
 
     // Double click to view details and edit modal
     div.addEventListener("dblclick", (e) => {
-      if (e.target.closest(".btn-add-left") || e.target.closest(".btn-add-right") || e.target.closest(".btn-add-sub")) {
+      if (e.target.closest("button")) {
         return;
       }
       e.stopPropagation();
