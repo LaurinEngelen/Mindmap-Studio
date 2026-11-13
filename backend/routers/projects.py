@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from backend.auth import require_auth
 from backend.models import ProjectCreate, ProjectUpdate
 from backend.database import get_db, get_project_folder, get_project_full_state, create_project_snapshot
+from backend.ws_manager import ws_manager
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
@@ -269,3 +270,159 @@ async def import_project(req: Request, authed: bool = Depends(require_auth)):
     create_project_snapshot(project_id)
 
     return {"success": True, "project_id": project_id, "title": title}
+
+
+@router.post("/{project_id}/import-mindmap")
+async def import_mindmap_into_project(
+    project_id: str,
+    req: Request,
+    authed: bool = Depends(require_auth)
+):
+    """Imports JSON mindmap contents into an existing project (replace or merge missing nodes)."""
+    try:
+        body = await req.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Ungültiges JSON")
+
+    mode = body.get("mode", "merge")
+    if mode not in ("replace", "merge"):
+        raise HTTPException(status_code=400, detail="Ungültiger Modus (erwartet: 'replace' oder 'merge')")
+
+    payload = body.get("data")
+    if not isinstance(payload, dict) or not isinstance(payload.get("tree"), dict):
+        raise HTTPException(status_code=400, detail="JSON enthält keine gültige Mindmap-Struktur ('tree')")
+
+    tree = payload["tree"]
+    positions = payload.get("positions") or {}
+    now = datetime.now().isoformat()
+
+    with get_db() as db:
+        cur = db.cursor()
+        cur.execute("SELECT id, title FROM projects WHERE id = ?", (project_id,))
+        proj = cur.fetchone()
+        if not proj:
+            raise HTTPException(status_code=404, detail="Projekt nicht gefunden")
+
+    # Backup before modifying
+    create_project_snapshot(project_id)
+
+    added_count = 0
+
+    with get_db() as db:
+        cur = db.cursor()
+
+        # Import missing team members so assignee references remain valid
+        cur.execute("SELECT id FROM team_members WHERE project_id = ?", (project_id,))
+        existing_team_ids = {row["id"] for row in cur.fetchall()}
+        for tm in payload.get("team") or []:
+            if isinstance(tm, dict) and tm.get("name"):
+                t_id = tm.get("id") or f"tm_{secrets.token_hex(4)}"
+                if t_id not in existing_team_ids:
+                    cur.execute("""
+                        INSERT OR IGNORE INTO team_members (id, project_id, name, color)
+                        VALUES (?, ?, ?, ?)
+                    """, (t_id, project_id, tm["name"], tm.get("color") or "#3b82f6"))
+                    existing_team_ids.add(t_id)
+
+        if mode == "replace":
+            cur.execute("DELETE FROM nodes WHERE project_id = ?", (project_id,))
+            existing_ids = set()
+            imported_root_id = tree.get("id") or "root"
+            pos_root = positions.get(imported_root_id, {})
+            cur.execute("""
+                INSERT INTO nodes (id, project_id, parent_id, side, title, desc, details, bullets_json, literature, color, assignee_id, is_favorite, pos_x, pos_y)
+                VALUES (?, ?, NULL, 'root', ?, ?, ?, ?, ?, 'blue', ?, ?, ?, ?)
+            """, (
+                imported_root_id,
+                project_id,
+                tree.get("title") or proj["title"] or "Zentrum",
+                tree.get("desc") or "",
+                tree.get("details") or "",
+                json.dumps(tree.get("bullets") or [], ensure_ascii=False),
+                tree.get("literature") or "",
+                tree.get("assigneeId") or tree.get("assignee_id") or "",
+                1 if tree.get("isFavorite") else 0,
+                pos_root.get("x"),
+                pos_root.get("y")
+            ))
+            added_count += 1
+            existing_ids.add(imported_root_id)
+            target_root_id = imported_root_id
+        else:
+            cur.execute("SELECT id, parent_id FROM nodes WHERE project_id = ?", (project_id,))
+            rows = cur.fetchall()
+            existing_ids = {row["id"] for row in rows}
+            root_rows = [row["id"] for row in rows if row["parent_id"] is None]
+            target_root_id = root_rows[0] if root_rows else "root"
+
+            if target_root_id not in existing_ids:
+                pos_root = positions.get(tree.get("id") or "root", {})
+                cur.execute("""
+                    INSERT INTO nodes (id, project_id, parent_id, side, title, desc, details, bullets_json, literature, color, assignee_id, is_favorite, pos_x, pos_y)
+                    VALUES (?, ?, NULL, 'root', ?, ?, ?, ?, ?, 'blue', '', 0, ?, ?)
+                """, (
+                    target_root_id,
+                    project_id,
+                    tree.get("title") or proj["title"] or "Zentrum",
+                    tree.get("desc") or "",
+                    tree.get("details") or "",
+                    json.dumps(tree.get("bullets") or [], ensure_ascii=False),
+                    tree.get("literature") or "",
+                    pos_root.get("x"),
+                    pos_root.get("y")
+                ))
+                existing_ids.add(target_root_id)
+                added_count += 1
+
+        def import_node_recursive(node: dict, parent_id: str, side: str):
+            nonlocal added_count
+            if not isinstance(node, dict):
+                return
+            raw_id = node.get("id")
+            nid = raw_id if raw_id else f"node_{secrets.token_hex(4)}"
+
+            if nid not in existing_ids:
+                actual_parent = parent_id if parent_id in existing_ids else target_root_id
+                pos = positions.get(nid, {})
+                cur.execute("""
+                    INSERT INTO nodes (id, project_id, parent_id, side, title, desc, details, bullets_json, literature, color, assignee_id, is_favorite, pos_x, pos_y)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    nid,
+                    project_id,
+                    actual_parent,
+                    side,
+                    node.get("title") or "Knoten",
+                    node.get("desc") or "",
+                    node.get("details") or "",
+                    json.dumps(node.get("bullets") or [], ensure_ascii=False),
+                    node.get("literature") or "",
+                    node.get("color") or "blue",
+                    node.get("assigneeId") or node.get("assignee_id") or "",
+                    1 if node.get("isFavorite") else 0,
+                    pos.get("x"),
+                    pos.get("y")
+                ))
+                existing_ids.add(nid)
+                added_count += 1
+
+            for ch in node.get("children") or []:
+                import_node_recursive(ch, nid, side)
+
+        for b in tree.get("leftBranches") or []:
+            import_node_recursive(b, target_root_id, "left")
+
+        for b in tree.get("rightBranches") or []:
+            import_node_recursive(b, target_root_id, "right")
+
+        cur.execute("UPDATE projects SET updated_at = ? WHERE id = ?", (now, project_id))
+
+    create_project_snapshot(project_id)
+
+    session_id = req.headers.get("X-Session-ID")
+    await ws_manager.broadcast_to_project(project_id, {
+        "type": "node_created",
+        "sessionId": session_id
+    }, exclude_session=session_id)
+
+    return {"success": True, "mode": mode, "added_count": added_count}
