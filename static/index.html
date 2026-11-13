@@ -191,6 +191,16 @@
       <div class="flex items-center gap-2 shrink-0">
         <button
           type="button"
+          onclick="window.StudioApp.Mindmap?.openCreateNodeModal('root', 'right')"
+          class="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs flex items-center gap-1.5 shadow-md shadow-blue-500/20 transition cursor-pointer"
+          title="Neuen Hauptknoten zur Mindmap hinzufügen"
+        >
+          <span>➕</span>
+          <span class="hidden md:inline">Knoten hinzufügen</span>
+        </button>
+
+        <button
+          type="button"
           onclick="window.StudioApp.Mindmap?.autoArrangeNodes()"
           class="px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold text-xs flex items-center gap-1.5 shadow-sm transition cursor-pointer"
           title="Knoten automatisch mit passendem Abstand anordnen"
@@ -507,10 +517,13 @@
           <h3 id="modalDetailTitle" class="font-bold text-base text-slate-900 dark:text-slate-100">Titel</h3>
         </div>
         <div class="flex items-center gap-1.5">
-          <button type="button" onclick="window.StudioApp.Mindmap?.openEditActiveNode()" class="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold flex items-center gap-1">
+          <button type="button" onclick="window.StudioApp.Mindmap?.openCreateSubnodeFromActive()" class="px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1 shadow-sm cursor-pointer" title="Unterknoten anlegen">
+            ➕ Unterknoten
+          </button>
+          <button type="button" onclick="window.StudioApp.Mindmap?.openEditActiveNode()" class="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold flex items-center gap-1 cursor-pointer">
             ✏️ Bearbeiten
           </button>
-          <button type="button" onclick="window.StudioApp.Mindmap?.closeNodeDetailModal()" class="w-7 h-7 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 text-xs">✕</button>
+          <button type="button" onclick="window.StudioApp.Mindmap?.closeNodeDetailModal()" class="w-7 h-7 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 text-xs cursor-pointer flex items-center justify-center">✕</button>
         </div>
       </div>
       <div class="p-5 overflow-y-auto space-y-4 text-xs">
@@ -553,6 +566,19 @@
         <input type="hidden" id="editNodeId" />
         <input type="hidden" id="editNodeParentId" />
         <input type="hidden" id="editNodeSide" />
+        <div id="editNodeSideContainer" class="hidden">
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Ausrichtung (Seite des Hauptzweigs)</label>
+          <div class="flex items-center gap-4 text-xs text-slate-700 dark:text-slate-300">
+            <label class="flex items-center gap-1.5 cursor-pointer">
+              <input type="radio" name="editNodeSideRadio" value="left" class="text-blue-600 focus:ring-blue-500" onchange="document.getElementById('editNodeSide').value = 'left'" />
+              <span>◀️ Nach Links abzweigen</span>
+            </label>
+            <label class="flex items-center gap-1.5 cursor-pointer">
+              <input type="radio" name="editNodeSideRadio" value="right" checked class="text-blue-600 focus:ring-blue-500" onchange="document.getElementById('editNodeSide').value = 'right'" />
+              <span>▶️ Nach Rechts abzweigen</span>
+            </label>
+          </div>
+        </div>
         <div>
           <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Titel *</label>
           <input

@@ -13,6 +13,13 @@ class StudioApplication {
     this.activeProjectId = null;
     this.activeWorkspaceTab = "mindmap"; // 'mindmap' | 'docs'
     this.isDarkMode = localStorage.getItem("studio_dark_mode") === "true";
+
+    // Bind sub-modules to application instance
+    this.Dashboard = Dashboard;
+    this.Mindmap = Mindmap;
+    this.Team = Team;
+    this.Tasks = Tasks;
+    this.Documents = Documents;
   }
 
   async init() {
@@ -39,6 +46,26 @@ class StudioApplication {
       } else {
         this.showDashboard(false);
       }
+    });
+
+    // Close open modals on Escape key
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        document.querySelectorAll(".fixed.inset-0:not(.hidden)").forEach(modal => {
+          if (modal.id !== "loginModal") {
+            modal.classList.add("hidden");
+          }
+        });
+      }
+    });
+
+    // Close modals on clicking directly on backdrop
+    document.querySelectorAll(".fixed.inset-0").forEach(modal => {
+      modal.addEventListener("pointerdown", (e) => {
+        if (e.target === modal && modal.id !== "loginModal") {
+          modal.classList.add("hidden");
+        }
+      });
     });
   }
 
@@ -467,6 +494,13 @@ class StudioApplication {
 
 // Global bootstrap
 window.StudioApp = new StudioApplication();
+
+// Attach modules directly to window.StudioApp for HTML onclick/oninput access
+window.StudioApp.Dashboard = Dashboard;
+window.StudioApp.Mindmap = Mindmap;
+window.StudioApp.Team = Team;
+window.StudioApp.Tasks = Tasks;
+window.StudioApp.Documents = Documents;
 
 // Helper mappings for inline HTML onclick attributes
 window.StudioApp.selectTeamColor = (color) => Team.setColor(color);
