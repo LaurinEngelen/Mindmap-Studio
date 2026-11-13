@@ -50,26 +50,34 @@ export const Mindmap = {
   _eventsBound: false,
   activeNodeData: null,
 
-  init(projectId, projectData) {
+  init(projectId, projectData, preserveViewport = false) {
     this.projectId = projectId;
     this.projectData = projectData;
     this.tree = projectData.tree || { id: "root", title: "Zentrum", leftBranches: [], rightBranches: [] };
     this.positions = projectData.positions || {};
     this.spacing = projectData.spacing || { x: 350, y: 80 };
-    this.selectedNodeIds = new Set();
+    if (!preserveViewport) {
+      this.selectedNodeIds = new Set();
+    }
     this.draggedNodeId = null;
     this.isBoxSelecting = false;
     this.isShiftDragging = false;
     this.shiftDescendantsAdded = false;
     this.coMovedInitialPositions = new Map();
 
-    this.scale = 1.0;
-    this.panX = 0;
-    this.panY = 0;
+    if (!preserveViewport) {
+      this.scale = 1.0;
+      this.panX = 0;
+      this.panY = 0;
+    }
 
     this.setupCanvasEvents();
     this.render();
-    setTimeout(() => this.centerView(), 50);
+    if (preserveViewport) {
+      this.updateTransform();
+    } else {
+      setTimeout(() => this.centerView(), 50);
+    }
   },
 
   toggleNodeSelection(nodeId, isShift) {
@@ -263,7 +271,7 @@ export const Mindmap = {
         this.updateTransform();
       } else if (this.draggedNodeId) {
         const dist = Math.hypot(e.clientX - this.dragStartCoords.x, e.clientY - this.dragStartCoords.y);
-        if (dist > 5) {
+        if (dist > 2) {
           this.hasDragged = true;
         }
 
@@ -277,6 +285,9 @@ export const Mindmap = {
 
           const dx = newX - this.dragStartNodePos.x;
           const dy = newY - this.dragStartNodePos.y;
+          if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
+            this.hasDragged = true;
+          }
 
           // If user presses Shift during drag, dynamically add descendants
           const shiftActive = e.shiftKey || this.isShiftPressed;
@@ -304,7 +315,7 @@ export const Mindmap = {
       }
     });
 
-    window.addEventListener("pointerup", async () => {
+    const finishPointerInteraction = async () => {
       if (this.isBoxSelecting) {
         this.isBoxSelecting = false;
         document.getElementById("selectionBox")?.classList.add("hidden");
@@ -328,13 +339,14 @@ export const Mindmap = {
         }
 
         const hadCoMoved = coMovedIds.length > 0;
+        const moved = this.hasDragged;
 
         this.draggedNodeId = null;
         this.isShiftDragging = false;
         this.shiftDescendantsAdded = false;
         this.coMovedInitialPositions.clear();
 
-        if (!this.hasDragged) {
+        if (!moved) {
           return;
         }
 
@@ -371,7 +383,10 @@ export const Mindmap = {
           }
         }
       }
-    });
+    };
+
+    window.addEventListener("pointerup", finishPointerInteraction);
+    window.addEventListener("pointercancel", finishPointerInteraction);
   },
 
   updateTransform() {
@@ -534,9 +549,13 @@ export const Mindmap = {
       </div>
     `;
 
+    // Prevent native HTML5 drag hijacking first pointer drag
+    div.addEventListener("dragstart", (e) => e.preventDefault());
+
     // Pointer event for dragging node
     div.addEventListener("pointerdown", (e) => {
       if (e.target.closest("button")) return;
+      e.preventDefault();
       e.stopPropagation();
 
       const shiftActive = e.shiftKey || this.isShiftPressed;
@@ -974,8 +993,8 @@ export const Mindmap = {
       }
 
       document.getElementById("nodeEditModal")?.classList.add("hidden");
-      // Reload workspace
-      window.StudioApp?.reloadCurrentWorkspace();
+      // Reload workspace without resetting viewport
+      await window.StudioApp?.reloadCurrentWorkspace(false, true);
     } catch (err) {
       showToast(err.message, "error");
     }
@@ -989,7 +1008,7 @@ export const Mindmap = {
       await API.delete(`/api/projects/${this.projectId}/nodes/${this.activeNodeData.id}`);
       this.closeNodeDetailModal();
       showToast("Knoten gelöscht!");
-      window.StudioApp?.reloadCurrentWorkspace();
+      await window.StudioApp?.reloadCurrentWorkspace(false, true);
     } catch (err) {
       showToast(err.message, "error");
     }
