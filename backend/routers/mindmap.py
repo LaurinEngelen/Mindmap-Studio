@@ -30,11 +30,29 @@ async def create_node(
 
         # Determine side: if parent is root or not set, use data.side, else inherit from parent
         side = data.side or "right"
+        parent_pos_x = 0.0
+        parent_pos_y = 0.0
         if data.parent_id and data.parent_id != "root":
-            cur.execute("SELECT side FROM nodes WHERE project_id = ? AND id = ?", (project_id, data.parent_id))
+            cur.execute("SELECT side, pos_x, pos_y FROM nodes WHERE project_id = ? AND id = ?", (project_id, data.parent_id))
             parent_row = cur.fetchone()
-            if parent_row and parent_row["side"] in ("left", "right"):
-                side = parent_row["side"]
+            if parent_row:
+                if parent_row["side"] in ("left", "right"):
+                    side = parent_row["side"]
+                parent_pos_x = parent_row["pos_x"] or 0.0
+                parent_pos_y = parent_row["pos_y"] or 0.0
+
+        pos_x = data.pos_x
+        pos_y = data.pos_y
+        if pos_x is None or pos_y is None:
+            dir_sign = -1.0 if side == "left" else 1.0
+            if data.parent_id and data.parent_id != "root":
+                pos_x = pos_x if pos_x is not None else (parent_pos_x + dir_sign * 350.0)
+                pos_y = pos_y if pos_y is not None else (parent_pos_y + 60.0)
+            else:
+                cur.execute("SELECT count(*) FROM nodes WHERE project_id = ? AND parent_id = 'root' AND side = ?", (project_id, side))
+                count = cur.fetchone()[0] or 0
+                pos_x = pos_x if pos_x is not None else (dir_sign * 350.0)
+                pos_y = pos_y if pos_y is not None else (count * 80.0)
 
         cur.execute("""
             INSERT INTO nodes (
@@ -55,8 +73,8 @@ async def create_node(
             data.color or "blue",
             data.assignee_id or "",
             1 if data.is_favorite else 0,
-            data.pos_x,
-            data.pos_y
+            pos_x,
+            pos_y
         ))
         cur.execute("UPDATE projects SET updated_at = ? WHERE id = ?", (now, project_id))
 

@@ -387,23 +387,44 @@ export const Mindmap = {
     // Center root
     newPositions["root"] = { x: 0, y: 0 };
 
-    // Layout branch recursive
-    const layoutBranch = (nodes, startX, dir, startY = 0) => {
-      let currentY = startY - ((nodes.length - 1) * spacingY) / 2;
-      nodes.forEach(node => {
-        newPositions[node.id] = { x: startX, y: currentY };
-        if (node.children && node.children.length > 0) {
-          layoutBranch(node.children, startX + dir * spacingX, dir, currentY);
-        }
-        currentY += spacingY;
+    const getSubtreeHeight = (node) => {
+      if (!node.children || node.children.length === 0) return spacingY;
+      let total = 0;
+      node.children.forEach(ch => { total += getSubtreeHeight(ch); });
+      return Math.max(spacingY, total);
+    };
+
+    const layoutSubtree = (node, x, dir, yCenter) => {
+      newPositions[node.id] = { x: Math.round(x), y: Math.round(yCenter) };
+      if (!node.children || node.children.length === 0) return;
+
+      const totalH = getSubtreeHeight(node);
+      let curY = yCenter - totalH / 2;
+      node.children.forEach(ch => {
+        const chH = getSubtreeHeight(ch);
+        const chCenterY = curY + chH / 2;
+        layoutSubtree(ch, x + dir * spacingX, dir, chCenterY);
+        curY += chH;
+      });
+    };
+
+    const layoutBranchList = (nodes, dir) => {
+      let totalH = 0;
+      nodes.forEach(n => { totalH += getSubtreeHeight(n); });
+      let curY = -totalH / 2;
+      nodes.forEach(n => {
+        const h = getSubtreeHeight(n);
+        const centerY = curY + h / 2;
+        layoutSubtree(n, dir * spacingX, dir, centerY);
+        curY += h;
       });
     };
 
     const left = this.tree.leftBranches || [];
     const right = this.tree.rightBranches || [];
 
-    layoutBranch(right, spacingX, 1);
-    layoutBranch(left, -spacingX, -1);
+    layoutBranchList(right, 1);
+    layoutBranchList(left, -1);
 
     this.positions = newPositions;
     this.render();
@@ -567,15 +588,31 @@ export const Mindmap = {
 
     try {
       if (!nodeId) {
+        // Calculate smart offset position based on parent and side
+        let posX = 350;
+        let posY = 0;
+        const dir = side === "left" ? -1 : 1;
+        if (parentId === "root") {
+          const branches = side === "left" ? (this.tree.leftBranches || []) : (this.tree.rightBranches || []);
+          posX = dir * (this.spacing?.x || 350);
+          posY = branches.length * (this.spacing?.y || 80);
+        } else {
+          const pPos = this.positions[parentId] || { x: 0, y: 0 };
+          posX = pPos.x + dir * (this.spacing?.x || 350);
+          posY = pPos.y + 40;
+        }
+
         // Create
-        const res = await API.post(`/api/projects/${this.projectId}/nodes`, {
+        await API.post(`/api/projects/${this.projectId}/nodes`, {
           parent_id: parentId,
           side: side,
           title: title,
           desc: descInput?.value.trim(),
           details: detailsInput?.value.trim(),
           assignee_id: assigneeSelect?.value || "",
-          is_favorite: !!favInput?.checked
+          is_favorite: !!favInput?.checked,
+          pos_x: Math.round(posX),
+          pos_y: Math.round(posY)
         });
         showToast("Knoten angelegt!");
       } else {
