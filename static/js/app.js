@@ -443,6 +443,54 @@ class StudioApplication {
     }
   }
 
+  openWorkspaceImportModal() {
+    if (!this.activeProjectId) return;
+    const modal = document.getElementById("workspaceImportModal");
+    const fileInput = document.getElementById("workspaceImportFileInput");
+    if (fileInput) fileInput.value = "";
+    const mergeRadio = document.querySelector('input[name="workspaceImportMode"][value="merge"]');
+    if (mergeRadio) mergeRadio.checked = true;
+    modal?.classList.remove("hidden");
+  }
+
+  closeWorkspaceImportModal() {
+    document.getElementById("workspaceImportModal")?.classList.add("hidden");
+  }
+
+  async submitWorkspaceImport(event) {
+    event.preventDefault();
+    if (!this.activeProjectId) return;
+
+    const fileInput = document.getElementById("workspaceImportFileInput");
+    const file = fileInput?.files?.[0];
+    if (!file) {
+      showToast("Bitte wähle eine JSON-Datei aus.", "error");
+      return;
+    }
+
+    const modeEl = document.querySelector('input[name="workspaceImportMode"]:checked');
+    const mode = modeEl ? modeEl.value : "merge";
+
+    try {
+      const text = await file.text();
+      const json = JSON.parse(text);
+      const res = await API.post(`/api/projects/${this.activeProjectId}/import-mindmap`, {
+        mode,
+        data: json
+      });
+
+      this.closeWorkspaceImportModal();
+      await this.reloadCurrentWorkspace(false);
+      if (mode === "replace") {
+        showToast(`Mindmap ersetzt (${res.added_count} Knoten importiert)`);
+      } else {
+        showToast(`${res.added_count} fehlende Knoten ergänzt`);
+      }
+    } catch (err) {
+      showToast("Import-Fehler: " + err.message, "error");
+    }
+  }
+
   // -----------------------------------------------------------
   // BACKUPS & REVISIONS MODAL
   // -----------------------------------------------------------
