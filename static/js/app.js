@@ -51,6 +51,7 @@ class StudioApplication {
     // Close open modals on Escape key
     window.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
+        this.closeWorkspaceSettingsMenu();
         document.querySelectorAll(".fixed.inset-0:not(.hidden)").forEach(modal => {
           if (modal.id !== "loginModal") {
             modal.classList.add("hidden");
@@ -66,6 +67,17 @@ class StudioApplication {
           modal.classList.add("hidden");
         }
       });
+    });
+
+    // Close workspace settings dropdown on outside pointerdown
+    window.addEventListener("pointerdown", (e) => {
+      const container = document.getElementById("workspaceSettingsMenuContainer");
+      const menu = document.getElementById("workspaceSettingsDropdown");
+      if (menu && !menu.classList.contains("hidden")) {
+        if (!container || !container.contains(e.target)) {
+          menu.classList.add("hidden");
+        }
+      }
     });
   }
 
@@ -283,6 +295,20 @@ class StudioApplication {
       viewMindmap?.classList.add("hidden");
       viewDocs?.classList.remove("hidden");
       Documents.render();
+    }
+  }
+
+  toggleWorkspaceSettingsMenu() {
+    const menu = document.getElementById("workspaceSettingsDropdown");
+    if (menu) {
+      menu.classList.toggle("hidden");
+    }
+  }
+
+  closeWorkspaceSettingsMenu() {
+    const menu = document.getElementById("workspaceSettingsDropdown");
+    if (menu) {
+      menu.classList.add("hidden");
     }
   }
 
