@@ -495,6 +495,11 @@ export const Mindmap = {
       });
     }
 
+    const hasChildren = isRoot
+      ? ((node.leftBranches && node.leftBranches.length > 0) || (node.rightBranches && node.rightBranches.length > 0))
+      : (node.children && node.children.length > 0);
+    const showDesc = !!(hasChildren && node.desc);
+
     div.innerHTML = `
       <div class="relative">
         ${assignee ? `
@@ -503,7 +508,7 @@ export const Mindmap = {
           </div>
         ` : ''}
 
-        <div class="flex items-center justify-between gap-2 mb-1 min-w-0">
+        <div class="flex items-center justify-between gap-4 ${showDesc ? 'mb-1' : ''} min-w-0">
           <div class="flex items-center gap-1.5 min-w-0 ${isRoot ? 'flex-1 justify-center' : ''}">
             ${!isRoot ? `<span class="w-2.5 h-2.5 rounded-full inline-block shrink-0 shadow-xs" style="background-color: ${branchColor}"></span>` : ''}
             ${node.isFavorite ? '<span class="text-xs text-amber-500 shrink-0">⭐</span>' : ''}
@@ -520,7 +525,7 @@ export const Mindmap = {
           `}
         </div>
 
-        ${node.desc ? `<p class="text-xs ${isRoot ? 'text-blue-100' : 'text-slate-600 dark:text-slate-300'} leading-snug mt-1 break-words">${escapeHtml(node.desc)}</p>` : ''}
+        ${showDesc ? `<p class="text-xs ${isRoot ? 'text-blue-100' : 'text-slate-600 dark:text-slate-300'} leading-snug mt-1 break-words">${escapeHtml(node.desc)}</p>` : ''}
       </div>
     `;
 
