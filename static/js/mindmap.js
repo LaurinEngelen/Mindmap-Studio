@@ -503,27 +503,24 @@ export const Mindmap = {
           </div>
         ` : ''}
 
-        <div class="flex items-center gap-1.5 mb-1 min-w-0">
-          ${!isRoot ? `<span class="w-2.5 h-2.5 rounded-full inline-block shrink-0 shadow-xs" style="background-color: ${branchColor}"></span>` : ''}
-          ${node.isFavorite ? '<span class="text-xs text-amber-500 shrink-0">⭐</span>' : ''}
-          <span class="font-bold text-xs truncate ${isRoot ? 'text-white' : 'text-slate-900 dark:text-slate-100'}">${escapeHtml(node.title)}</span>
+        <div class="flex items-center justify-between gap-2 mb-1 min-w-0">
+          <div class="flex items-center gap-1.5 min-w-0 ${isRoot ? 'flex-1 justify-center' : ''}">
+            ${!isRoot ? `<span class="w-2.5 h-2.5 rounded-full inline-block shrink-0 shadow-xs" style="background-color: ${branchColor}"></span>` : ''}
+            ${node.isFavorite ? '<span class="text-xs text-amber-500 shrink-0">⭐</span>' : ''}
+            <span class="font-bold text-xs truncate ${isRoot ? 'text-white' : 'text-slate-900 dark:text-slate-100'}">${escapeHtml(node.title)}</span>
+          </div>
+          ${isRoot ? `
+            <button type="button" class="btn-add-root w-5 h-5 rounded-md bg-blue-700/70 hover:bg-blue-800 text-white text-xs font-bold flex items-center justify-center shrink-0 opacity-75 hover:opacity-100 transition cursor-pointer" title="Neuen Hauptzweig hinzufügen">
+              +
+            </button>
+          ` : `
+            <button type="button" class="btn-add-sub w-5 h-5 rounded-md font-bold text-xs flex items-center justify-center shrink-0 opacity-65 hover:opacity-100 transition cursor-pointer" style="background-color: ${branchColor}18; color: ${branchColor}" title="Unterknoten anlegen">
+              +
+            </button>
+          `}
         </div>
 
-        ${node.desc ? `<p class="text-xs line-clamp-4 ${isRoot ? 'text-blue-100' : 'text-slate-600 dark:text-slate-300'} leading-snug mt-0.5">${escapeHtml(node.desc)}</p>` : ''}
-
-        ${isRoot ? `
-          <div class="mt-3 pt-2 border-t border-blue-500/50 flex items-center justify-center">
-            <button type="button" class="btn-add-root w-7 h-7 rounded-lg bg-blue-700/80 hover:bg-blue-800 text-white text-sm font-bold flex items-center justify-center shadow-xs cursor-pointer transition hover:scale-105" title="Neuen Hauptzweig hinzufügen">
-              +
-            </button>
-          </div>
-        ` : `
-          <div class="mt-2 pt-1.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end">
-            <button type="button" class="btn-add-sub w-6 h-6 rounded-lg font-bold text-sm flex items-center justify-center cursor-pointer transition hover:scale-110" style="background-color: ${branchColor}18; color: ${branchColor}" title="Unterknoten anlegen">
-              +
-            </button>
-          </div>
-        `}
+        ${node.desc ? `<p class="text-xs ${isRoot ? 'text-blue-100' : 'text-slate-600 dark:text-slate-300'} leading-snug mt-1 break-words">${escapeHtml(node.desc)}</p>` : ''}
       </div>
     `;
 
