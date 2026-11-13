@@ -164,7 +164,13 @@ async def update_node(
                     [assignee_id, project_id, *descendants]
                 )
 
-        cur.execute("UPDATE projects SET updated_at = ? WHERE id = ?", (now, project_id))
+        if node_id == "root" or curr["parent_id"] is None:
+            cur.execute(
+                "UPDATE projects SET title = ?, description = ?, updated_at = ? WHERE id = ?",
+                (title, desc, now, project_id)
+            )
+        else:
+            cur.execute("UPDATE projects SET updated_at = ? WHERE id = ?", (now, project_id))
 
     session_id = req.headers.get("X-Session-ID")
     await ws_manager.broadcast_to_project(project_id, {
