@@ -678,7 +678,7 @@ export const Mindmap = {
     (this.tree.rightBranches || []).forEach(b => drawConnection(b, "root", "right", true));
   },
 
-  async autoArrangeNodes() {
+  async autoArrangeNodes(shouldCenter = true, showNotification = true) {
     const gapX = 110;
     const gapY = 30;
     const minSpacingY = Math.max(this.spacing.y || 80, 100);
@@ -785,13 +785,17 @@ export const Mindmap = {
 
     this.positions = newPositions;
     this.render();
-    this.centerView();
+    if (shouldCenter) {
+      this.centerView();
+    }
 
     try {
       await API.post(`/api/projects/${this.projectId}/nodes/positions/batch`, {
         positions: newPositions
       });
-      showToast("📐 Mindmap automatisch angeordnet!");
+      if (showNotification) {
+        showToast("📐 Mindmap automatisch angeordnet!");
+      }
     } catch (err) {
       showToast("Fehler beim Speichern der Anordnung", "error");
     }
@@ -995,6 +999,10 @@ export const Mindmap = {
       document.getElementById("nodeEditModal")?.classList.add("hidden");
       // Reload workspace without resetting viewport
       await window.StudioApp?.reloadCurrentWorkspace(false, true);
+      if (!nodeId) {
+        // Auto-arrange without centering so new nodes never overlap existing ones
+        await this.autoArrangeNodes(false, false);
+      }
     } catch (err) {
       showToast(err.message, "error");
     }
