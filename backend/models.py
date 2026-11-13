@@ -42,6 +42,7 @@ class NodeUpdate(BaseModel):
     literature: Optional[str] = None
     color: Optional[str] = None
     assignee_id: Optional[str] = None
+    cascade_assignee: Optional[bool] = False
     is_favorite: Optional[bool] = None
     parent_id: Optional[str] = None
     side: Optional[str] = None

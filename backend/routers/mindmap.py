@@ -143,6 +143,27 @@ async def update_node(
             color, assignee_id, is_fav, parent_id, side,
             project_id, node_id
         ))
+
+        if data.cascade_assignee and data.assignee_id is not None:
+            cur.execute("SELECT id, parent_id FROM nodes WHERE project_id = ?", (project_id,))
+            children_map: dict[str, list[str]] = {}
+            for r in cur.fetchall():
+                pid = r["parent_id"]
+                if pid:
+                    children_map.setdefault(pid, []).append(r["id"])
+            descendants: list[str] = []
+            stack = list(children_map.get(node_id, []))
+            while stack:
+                cid = stack.pop()
+                descendants.append(cid)
+                stack.extend(children_map.get(cid, []))
+            if descendants:
+                placeholders = ",".join("?" for _ in descendants)
+                cur.execute(
+                    f"UPDATE nodes SET assignee_id = ? WHERE project_id = ? AND id IN ({placeholders})",
+                    [assignee_id, project_id, *descendants]
+                )
+
         cur.execute("UPDATE projects SET updated_at = ? WHERE id = ?", (now, project_id))
 
     session_id = req.headers.get("X-Session-ID")

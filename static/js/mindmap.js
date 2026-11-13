@@ -509,7 +509,7 @@ export const Mindmap = {
           <span class="font-bold text-xs truncate ${isRoot ? 'text-white' : 'text-slate-900 dark:text-slate-100'}">${escapeHtml(node.title)}</span>
         </div>
 
-        ${node.desc ? `<p class="text-[11px] line-clamp-2 ${isRoot ? 'text-blue-100' : 'text-slate-500 dark:text-slate-400'} leading-tight">${escapeHtml(node.desc)}</p>` : ''}
+        ${node.desc ? `<p class="text-xs line-clamp-4 ${isRoot ? 'text-blue-100' : 'text-slate-600 dark:text-slate-300'} leading-snug mt-0.5">${escapeHtml(node.desc)}</p>` : ''}
 
         ${isRoot ? `
           <div class="mt-3 pt-2 border-t border-blue-500/50 flex items-center justify-center">
@@ -518,8 +518,7 @@ export const Mindmap = {
             </button>
           </div>
         ` : `
-          <div class="mt-2 pt-1.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[10px] text-slate-400">
-            <span>${(node.children || []).length > 0 ? `🌿 ${node.children.length}` : '•'}</span>
+          <div class="mt-2 pt-1.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end">
             <button type="button" class="btn-add-sub w-6 h-6 rounded-lg font-bold text-sm flex items-center justify-center cursor-pointer transition hover:scale-110" style="background-color: ${branchColor}18; color: ${branchColor}" title="Unterknoten anlegen">
               +
             </button>
@@ -859,6 +858,9 @@ export const Mindmap = {
     }
 
     Team.populateSelect("editNodeAssignee", "");
+    const cascadeBox = document.getElementById("editNodeAssigneeCascade");
+    if (cascadeBox) cascadeBox.checked = false;
+    document.getElementById("editNodeAssigneeCascadeContainer")?.classList.add("hidden");
     modal.classList.remove("hidden");
     setTimeout(() => titleInput?.focus(), 50);
   },
@@ -894,6 +896,9 @@ export const Mindmap = {
     }
 
     Team.populateSelect("editNodeAssignee", node.assigneeId || "");
+    const cascadeBox = document.getElementById("editNodeAssigneeCascade");
+    if (cascadeBox) cascadeBox.checked = false;
+    document.getElementById("editNodeAssigneeCascadeContainer")?.classList.remove("hidden");
     modal.classList.remove("hidden");
     setTimeout(() => titleInput?.focus(), 50);
   },
@@ -949,11 +954,13 @@ export const Mindmap = {
         showToast("Knoten angelegt!");
       } else {
         // Update
+        const cascadeAssignee = !!document.getElementById("editNodeAssigneeCascade")?.checked;
         await API.put(`/api/projects/${this.projectId}/nodes/${nodeId}`, {
           title: title,
           desc: descInput?.value.trim(),
           details: detailsInput?.value.trim(),
           assignee_id: assigneeSelect?.value || "",
+          cascade_assignee: cascadeAssignee,
           is_favorite: !!favInput?.checked
         });
         showToast("Knoten gespeichert!");
