@@ -498,7 +498,12 @@ export const Mindmap = {
     const hasChildren = isRoot
       ? ((node.leftBranches && node.leftBranches.length > 0) || (node.rightBranches && node.rightBranches.length > 0))
       : (node.children && node.children.length > 0);
-    const showDesc = !!(hasChildren && node.desc);
+    let displayDesc = (node.desc || "").trim();
+    if (!displayDesc && hasChildren && node.details) {
+      const firstLine = node.details.trim().split(/\r?\n/)[0].replace(/^[#>*\-\s]+/, "").trim();
+      displayDesc = firstLine.length > 140 ? firstLine.slice(0, 137) + "…" : firstLine;
+    }
+    const showDesc = !!(hasChildren && displayDesc);
 
     div.innerHTML = `
       <div class="relative">
@@ -525,7 +530,7 @@ export const Mindmap = {
           `}
         </div>
 
-        ${showDesc ? `<p class="text-xs ${isRoot ? 'text-blue-100' : 'text-slate-600 dark:text-slate-300'} leading-snug mt-1 break-words">${escapeHtml(node.desc)}</p>` : ''}
+        ${showDesc ? `<p class="text-xs ${isRoot ? 'text-blue-100' : 'text-slate-600 dark:text-slate-300'} leading-snug mt-1 break-words">${escapeHtml(displayDesc)}</p>` : ''}
       </div>
     `;
 
