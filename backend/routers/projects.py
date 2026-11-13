@@ -58,8 +58,8 @@ def create_project(data: ProjectCreate, authed: bool = Depends(require_auth)):
         # Create default root node
         cur.execute("""
             INSERT INTO nodes (id, project_id, parent_id, side, title, desc, details, bullets_json, literature, color)
-            VALUES (?, ?, NULL, 'root', ?, '', '', '[]', '', 'blue')
-        """, ("root", project_id, data.title))
+            VALUES (?, ?, NULL, 'root', ?, ?, '', '[]', '', 'blue')
+        """, ("root", project_id, data.title, data.description or ""))
 
     # Initialize physical folders
     get_project_folder(project_id)
@@ -118,7 +118,10 @@ def update_project(project_id: str, data: ProjectUpdate, authed: bool = Depends(
 
         if data.title is not None:
             # Also update root node title if project title changed
-            cur.execute("UPDATE nodes SET title = ? WHERE project_id = ? AND id = 'root'", (title, project_id))
+            cur.execute("UPDATE nodes SET title = ? WHERE project_id = ? AND (id = 'root' OR parent_id IS NULL)", (title, project_id))
+        if data.description is not None:
+            # Also update root node short description if project description changed
+            cur.execute("UPDATE nodes SET desc = ? WHERE project_id = ? AND (id = 'root' OR parent_id IS NULL)", (description, project_id))
 
     create_project_snapshot(project_id)
     return {"success": True, "updated_at": now}
