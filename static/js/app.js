@@ -2,7 +2,7 @@
 import { API, showToast } from "./api.js";
 import { ws } from "./ws.js";
 import { Dashboard } from "./dashboard.js";
-import { Mindmap } from "./mindmap.js?v=3.4";
+import { Mindmap } from "./mindmap.js?v=3.5";
 import { Team } from "./team.js";
 import { Tasks } from "./tasks.js";
 import { Documents } from "./documents.js";
