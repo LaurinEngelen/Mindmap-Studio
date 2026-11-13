@@ -2,7 +2,7 @@
 import { API, showToast } from "./api.js";
 import { ws } from "./ws.js";
 import { Dashboard } from "./dashboard.js";
-import { Mindmap } from "./mindmap.js?v=3.9";
+import { Mindmap } from "./mindmap.js?v=4.0";
 import { Team } from "./team.js";
 import { Tasks } from "./tasks.js";
 import { Documents } from "./documents.js?v=3.6";
@@ -256,14 +256,14 @@ class StudioApplication {
     }
   }
 
-  async reloadCurrentWorkspace(showNotification = true) {
+  async reloadCurrentWorkspace(showNotification = true, preserveViewport = true) {
     if (!this.activeProjectId) return;
     try {
       const projectData = await API.get(`/api/projects/${this.activeProjectId}`);
       Team.init(this.activeProjectId, projectData.team || []);
       Tasks.init(this.activeProjectId, projectData.tasks || []);
       Documents.init(this.activeProjectId, projectData.documents || []);
-      Mindmap.init(this.activeProjectId, projectData);
+      Mindmap.init(this.activeProjectId, projectData, preserveViewport);
       if (showNotification) showToast("Aktualisiert");
     } catch (err) {
       console.warn("Failed to reload workspace:", err);
