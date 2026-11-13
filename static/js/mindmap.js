@@ -654,51 +654,109 @@ export const Mindmap = {
   },
 
   async autoArrangeNodes() {
-    const spacingX = this.spacing.x || 350;
-    const spacingY = this.spacing.y || 80;
+    const gapX = 110;
+    const gapY = 30;
+    const minSpacingY = Math.max(this.spacing.y || 80, 100);
     const newPositions = {};
+    const rootId = this.tree?.id || "root";
 
-    // Center root
-    newPositions["root"] = { x: 0, y: 0 };
-
-    const getSubtreeHeight = (node) => {
-      if (!node.children || node.children.length === 0) return spacingY;
-      let total = 0;
-      node.children.forEach(ch => { total += getSubtreeHeight(ch); });
-      return Math.max(spacingY, total);
+    const getNodeSize = (nodeId) => {
+      const el = document.getElementById(`node_${nodeId}`);
+      if (el && el.offsetWidth > 0 && el.offsetHeight > 0) {
+        return { w: el.offsetWidth, h: el.offsetHeight };
+      }
+      return { w: nodeId === rootId ? 220 : 240, h: nodeId === rootId ? 100 : 110 };
     };
 
-    const layoutSubtree = (node, x, dir, yCenter) => {
-      newPositions[node.id] = { x: Math.round(x), y: Math.round(yCenter) };
-      if (!node.children || node.children.length === 0) return;
+    const rootSize = getNodeSize(rootId);
+    newPositions[rootId] = { x: 0, y: 0 };
+    const rootCenterY = rootSize.h / 2;
 
-      const totalH = getSubtreeHeight(node);
-      let curY = yCenter - totalH / 2;
-      node.children.forEach(ch => {
-        const chH = getSubtreeHeight(ch);
-        const chCenterY = curY + chH / 2;
-        layoutSubtree(ch, x + dir * spacingX, dir, chCenterY);
-        curY += chH;
-      });
-    };
-
-    const layoutBranchList = (nodes, dir) => {
-      let totalH = 0;
-      nodes.forEach(n => { totalH += getSubtreeHeight(n); });
-      let curY = -totalH / 2;
-      nodes.forEach(n => {
-        const h = getSubtreeHeight(n);
-        const centerY = curY + h / 2;
-        layoutSubtree(n, dir * spacingX, dir, centerY);
-        curY += h;
-      });
+    // Measure max node width per depth level on each side so columns never overlap horizontally
+    const collectMaxWidths = (nodes, depth, widthMap) => {
+      for (const n of nodes) {
+        const w = getNodeSize(n.id).w;
+        widthMap[depth] = Math.max(widthMap[depth] || 0, w);
+        if (n.children && n.children.length > 0) {
+          collectMaxWidths(n.children, depth + 1, widthMap);
+        }
+      }
     };
 
     const left = this.tree.leftBranches || [];
     const right = this.tree.rightBranches || [];
 
-    layoutBranchList(right, 1);
-    layoutBranchList(left, -1);
+    const maxWRight = { 0: rootSize.w };
+    const maxWLeft = { 0: rootSize.w };
+    collectMaxWidths(right, 1, maxWRight);
+    collectMaxWidths(left, 1, maxWLeft);
+
+    const xRight = { 0: 0 };
+    const xLeft = { 0: 0 };
+    const maxDepthRight = Math.max(0, ...Object.keys(maxWRight).map(Number));
+    const maxDepthLeft = Math.max(0, ...Object.keys(maxWLeft).map(Number));
+
+    for (let d = 1; d <= maxDepthRight; d++) {
+      xRight[d] = xRight[d - 1] + (maxWRight[d - 1] || 240) + gapX;
+    }
+    for (let d = 1; d <= maxDepthLeft; d++) {
+      xLeft[d] = xLeft[d - 1] - (maxWLeft[d] || 240) - gapX;
+    }
+
+    const subtreeHeightCache = new Map();
+    const getSubtreeHeight = (node) => {
+      if (subtreeHeightCache.has(node.id)) return subtreeHeightCache.get(node.id);
+      const ownH = Math.max(minSpacingY, getNodeSize(node.id).h + gapY);
+      if (!node.children || node.children.length === 0) {
+        subtreeHeightCache.set(node.id, ownH);
+        return ownH;
+      }
+      let childrenTotal = 0;
+      for (const ch of node.children) {
+        childrenTotal += getSubtreeHeight(ch);
+      }
+      const res = Math.max(ownH, childrenTotal);
+      subtreeHeightCache.set(node.id, res);
+      return res;
+    };
+
+    const layoutSubtree = (node, depth, xCols, yCenter) => {
+      const nodeH = getNodeSize(node.id).h;
+      const x = xCols[depth] ?? (depth * 350);
+      newPositions[node.id] = { x: Math.round(x), y: Math.round(yCenter - nodeH / 2) };
+
+      if (!node.children || node.children.length === 0) return;
+
+      let childrenTotal = 0;
+      for (const ch of node.children) {
+        childrenTotal += getSubtreeHeight(ch);
+      }
+      let curY = yCenter - childrenTotal / 2;
+      for (const ch of node.children) {
+        const chH = getSubtreeHeight(ch);
+        const chCenterY = curY + chH / 2;
+        layoutSubtree(ch, depth + 1, xCols, chCenterY);
+        curY += chH;
+      }
+    };
+
+    const layoutBranchList = (nodes, xCols) => {
+      if (!nodes.length) return;
+      let totalH = 0;
+      for (const n of nodes) {
+        totalH += getSubtreeHeight(n);
+      }
+      let curY = rootCenterY - totalH / 2;
+      for (const n of nodes) {
+        const h = getSubtreeHeight(n);
+        const centerY = curY + h / 2;
+        layoutSubtree(n, 1, xCols, centerY);
+        curY += h;
+      }
+    };
+
+    layoutBranchList(right, xRight);
+    layoutBranchList(left, xLeft);
 
     this.positions = newPositions;
     this.render();
