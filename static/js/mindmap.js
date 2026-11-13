@@ -31,9 +31,16 @@ export const Mindmap = {
   isPanning: false,
   startPan: { x: 0, y: 0 },
 
-  // Node Dragging
+  // Node Dragging & Multi-selection
   draggedNodeId: null,
   dragOffset: { x: 0, y: 0 },
+  dragStartCoords: { x: 0, y: 0 },
+  dragStartNodePos: { x: 0, y: 0 },
+  hasDragged: false,
+  isShiftDragging: false,
+  draggedDescendantIds: null,
+  initialDescendantPositions: null,
+  selectedNodeIds: new Set(),
   activeNodeData: null,
 
   init(projectId, projectData) {
@@ -42,6 +49,11 @@ export const Mindmap = {
     this.tree = projectData.tree || { id: "root", title: "Zentrum", leftBranches: [], rightBranches: [] };
     this.positions = projectData.positions || {};
     this.spacing = projectData.spacing || { x: 350, y: 80 };
+    this.selectedNodeIds = new Set();
+    this.draggedNodeId = null;
+    this.isShiftDragging = false;
+    this.draggedDescendantIds = null;
+    this.initialDescendantPositions = null;
 
     this.scale = 1.0;
     this.panX = 0;
@@ -52,6 +64,87 @@ export const Mindmap = {
     setTimeout(() => this.centerView(), 50);
   },
 
+  toggleNodeSelection(nodeId, isShift) {
+    if (isShift) {
+      if (this.selectedNodeIds.has(nodeId)) {
+        this.selectedNodeIds.delete(nodeId);
+      } else {
+        this.selectedNodeIds.add(nodeId);
+      }
+    } else {
+      if (this.selectedNodeIds.has(nodeId) && this.selectedNodeIds.size === 1) {
+        this.selectedNodeIds.clear();
+      } else {
+        this.selectedNodeIds.clear();
+        this.selectedNodeIds.add(nodeId);
+      }
+    }
+    this.updateSelectionStyles();
+  },
+
+  clearSelection() {
+    if (this.selectedNodeIds.size === 0) return;
+    this.selectedNodeIds.clear();
+    this.updateSelectionStyles();
+  },
+
+  updateSelectionStyles() {
+    document.querySelectorAll(".mindmap-node").forEach(el => {
+      const nid = el.dataset.nodeId;
+      if (this.selectedNodeIds.has(nid)) {
+        el.classList.add("ring-4", "ring-blue-500", "ring-offset-2", "dark:ring-offset-slate-900", "shadow-xl", "z-30");
+      } else {
+        el.classList.remove("ring-4", "ring-blue-500", "ring-offset-2", "dark:ring-offset-slate-900", "shadow-xl", "z-30");
+      }
+    });
+  },
+
+  getDescendantIds(nodeId) {
+    const ids = [];
+    if (!this.tree) return ids;
+
+    if (nodeId === "root" || nodeId === this.tree.id) {
+      const collect = (node) => {
+        if (!node) return;
+        ids.push(node.id);
+        if (node.children) {
+          node.children.forEach(collect);
+        }
+      };
+      (this.tree.leftBranches || []).forEach(collect);
+      (this.tree.rightBranches || []).forEach(collect);
+      return ids;
+    }
+
+    const findNode = (curr) => {
+      if (!curr) return null;
+      if (curr.id === nodeId) return curr;
+      const branches = [
+        ...(curr.leftBranches || []),
+        ...(curr.rightBranches || []),
+        ...(curr.children || [])
+      ];
+      for (const b of branches) {
+        const found = findNode(b);
+        if (found) return found;
+      }
+      return null;
+    };
+
+    const target = findNode(this.tree);
+    if (target && target.children) {
+      const collect = (n) => {
+        if (!n) return;
+        ids.push(n.id);
+        if (n.children) {
+          n.children.forEach(collect);
+        }
+      };
+      target.children.forEach(collect);
+    }
+    return ids;
+  },
+
   setupCanvasEvents() {
     const container = document.getElementById("canvasContainer");
     if (!container) return;
@@ -60,6 +153,9 @@ export const Mindmap = {
     container.onpointerdown = (e) => {
       if (e.target.closest(".mindmap-node") || e.target.closest("button") || e.target.closest("input")) {
         return;
+      }
+      if (!e.shiftKey) {
+        this.clearSelection();
       }
       this.isPanning = true;
       this.startPan = { x: e.clientX - this.panX, y: e.clientY - this.panY };
@@ -72,6 +168,11 @@ export const Mindmap = {
         this.panY = e.clientY - this.startPan.y;
         this.updateTransform();
       } else if (this.draggedNodeId) {
+        const dist = Math.hypot(e.clientX - this.dragStartCoords.x, e.clientY - this.dragStartCoords.y);
+        if (dist > 4) {
+          this.hasDragged = true;
+        }
+
         const el = document.getElementById(`node_${this.draggedNodeId}`);
         if (el) {
           const newX = (e.clientX - this.panX) / this.scale - this.dragOffset.x;
@@ -79,6 +180,38 @@ export const Mindmap = {
           el.style.left = `${newX}px`;
           el.style.top = `${newY}px`;
           this.positions[this.draggedNodeId] = { x: newX, y: newY };
+
+          const dx = newX - this.dragStartNodePos.x;
+          const dy = newY - this.dragStartNodePos.y;
+
+          // If user presses Shift during drag, dynamically initialize descendants if not already done
+          if (e.shiftKey && !this.draggedDescendantIds) {
+            this.isShiftDragging = true;
+            this.draggedDescendantIds = this.getDescendantIds(this.draggedNodeId);
+            this.initialDescendantPositions = {};
+            for (const cid of this.draggedDescendantIds) {
+              const chEl = document.getElementById(`node_${cid}`);
+              const cx = chEl ? parseFloat(chEl.style.left) || 0 : (this.positions[cid]?.x || 0);
+              const cy = chEl ? parseFloat(chEl.style.top) || 0 : (this.positions[cid]?.y || 0);
+              this.initialDescendantPositions[cid] = { x: cx - dx, y: cy - dy };
+            }
+          }
+
+          if (this.isShiftDragging && this.draggedDescendantIds && this.draggedDescendantIds.length > 0) {
+            for (const cid of this.draggedDescendantIds) {
+              const init = this.initialDescendantPositions[cid];
+              if (!init) continue;
+              const chX = init.x + dx;
+              const chY = init.y + dy;
+              const childEl = document.getElementById(`node_${cid}`);
+              if (childEl) {
+                childEl.style.left = `${chX}px`;
+                childEl.style.top = `${chY}px`;
+              }
+              this.positions[cid] = { x: chX, y: chY };
+            }
+          }
+
           requestAnimationFrame(() => this.renderLines());
         }
       }
@@ -93,17 +226,45 @@ export const Mindmap = {
         const nodeId = this.draggedNodeId;
         const el = document.getElementById(`node_${nodeId}`);
         el?.classList.remove("is-dragging");
-        this.draggedNodeId = null;
 
-        const pos = this.positions[nodeId];
-        if (pos) {
+        const wasShiftDragging = this.isShiftDragging && this.draggedDescendantIds && this.draggedDescendantIds.length > 0;
+        const descendantIds = this.draggedDescendantIds || [];
+
+        this.draggedNodeId = null;
+        this.isShiftDragging = false;
+        this.draggedDescendantIds = null;
+        this.initialDescendantPositions = null;
+
+        if (wasShiftDragging) {
+          const batchUpdates = {};
+          const parentPos = this.positions[nodeId];
+          if (parentPos) {
+            batchUpdates[nodeId] = { x: Math.round(parentPos.x), y: Math.round(parentPos.y) };
+          }
+          for (const cid of descendantIds) {
+            const cPos = this.positions[cid];
+            if (cPos) {
+              batchUpdates[cid] = { x: Math.round(cPos.x), y: Math.round(cPos.y) };
+            }
+          }
           try {
-            await API.patch(`/api/projects/${this.projectId}/nodes/${nodeId}/position`, {
-              x: Math.round(pos.x),
-              y: Math.round(pos.y)
+            await API.post(`/api/projects/${this.projectId}/nodes/positions/batch`, {
+              positions: batchUpdates
             });
           } catch (err) {
-            console.warn("Failed to save node position delta:", err);
+            console.warn("Failed to save batch node positions:", err);
+          }
+        } else {
+          const pos = this.positions[nodeId];
+          if (pos) {
+            try {
+              await API.patch(`/api/projects/${this.projectId}/nodes/${nodeId}/position`, {
+                x: Math.round(pos.x),
+                y: Math.round(pos.y)
+              });
+            } catch (err) {
+              console.warn("Failed to save node position delta:", err);
+            }
           }
         }
       }
@@ -210,6 +371,7 @@ export const Mindmap = {
       nodesLayer.appendChild(el);
     });
 
+    this.updateSelectionStyles();
     requestAnimationFrame(() => this.renderLines());
   },
 
@@ -287,17 +449,38 @@ export const Mindmap = {
     div.addEventListener("pointerdown", (e) => {
       if (e.target.closest("button")) return;
       e.stopPropagation();
+
       this.draggedNodeId = node.id;
+      this.dragStartCoords = { x: e.clientX, y: e.clientY };
+      this.hasDragged = false;
+      this.isShiftDragging = e.shiftKey;
+
       div.classList.add("is-dragging");
+
       const currentX = parseFloat(div.style.left) || 0;
       const currentY = parseFloat(div.style.top) || 0;
+      this.dragStartNodePos = { x: currentX, y: currentY };
       this.dragOffset = {
         x: (e.clientX - this.panX) / this.scale - currentX,
         y: (e.clientY - this.panY) / this.scale - currentY
       };
+
+      if (this.isShiftDragging) {
+        this.draggedDescendantIds = this.getDescendantIds(node.id);
+        this.initialDescendantPositions = {};
+        for (const cid of this.draggedDescendantIds) {
+          const el = document.getElementById(`node_${cid}`);
+          const cx = el ? parseFloat(el.style.left) || 0 : (this.positions[cid]?.x || 0);
+          const cy = el ? parseFloat(el.style.top) || 0 : (this.positions[cid]?.y || 0);
+          this.initialDescendantPositions[cid] = { x: cx, y: cy };
+        }
+      } else {
+        this.draggedDescendantIds = null;
+        this.initialDescendantPositions = null;
+      }
     });
 
-    // Click to view details
+    // Single click for selection or branch actions
     div.addEventListener("click", (e) => {
       if (e.target.closest(".btn-add-left")) {
         e.stopPropagation();
@@ -314,6 +497,19 @@ export const Mindmap = {
         this.openCreateNodeModal(node.id, node.side || "right");
         return;
       }
+      if (this.hasDragged) {
+        return;
+      }
+      e.stopPropagation();
+      this.toggleNodeSelection(node.id, e.shiftKey);
+    });
+
+    // Double click to view details and edit modal
+    div.addEventListener("dblclick", (e) => {
+      if (e.target.closest(".btn-add-left") || e.target.closest(".btn-add-right") || e.target.closest(".btn-add-sub")) {
+        return;
+      }
+      e.stopPropagation();
       this.openNodeDetailModal(node);
     });
 

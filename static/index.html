@@ -165,79 +165,8 @@
         </div>
       </div>
 
-      <!-- Center: View Switcher (Mindmap vs. Dokumente) -->
-      <div class="flex items-center p-0.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs shrink-0">
-        <button
-          type="button"
-          id="btnTabMindmap"
-          onclick="window.StudioApp.switchWorkspaceTab('mindmap')"
-          class="px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition cursor-pointer bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm"
-        >
-          <span>🧠</span>
-          <span>Mindmap</span>
-        </button>
-        <button
-          type="button"
-          id="btnTabDocs"
-          onclick="window.StudioApp.switchWorkspaceTab('docs')"
-          class="px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5 transition cursor-pointer text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
-        >
-          <span>📚</span>
-          <span>Dokumente</span>
-        </button>
-      </div>
-
-      <!-- Right: Action Icons & Tasks Drawer Toggle -->
+      <!-- Right: Tasks Drawer Toggle, View Switcher (Mindmap vs. Dokumente), Gear Dropdown, Theme Toggle -->
       <div class="flex items-center gap-2 shrink-0">
-        <button
-          type="button"
-          onclick="window.StudioApp.Mindmap?.openCreateNodeModal('root', 'right')"
-          class="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs flex items-center gap-1.5 shadow-md shadow-blue-500/20 transition cursor-pointer"
-          title="Neuen Hauptknoten zur Mindmap hinzufügen"
-        >
-          <span>➕</span>
-          <span class="hidden md:inline">Knoten hinzufügen</span>
-        </button>
-
-        <button
-          type="button"
-          onclick="window.StudioApp.Mindmap?.autoArrangeNodes()"
-          class="px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold text-xs flex items-center gap-1.5 shadow-sm transition cursor-pointer"
-          title="Knoten automatisch mit passendem Abstand anordnen"
-        >
-          <span>📐</span>
-          <span class="hidden lg:inline">Auto-Layout</span>
-        </button>
-
-        <button
-          type="button"
-          onclick="window.StudioApp.openBackupsModal()"
-          class="w-8 h-8 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center text-xs text-slate-700 dark:text-slate-300 shadow-sm cursor-pointer"
-          title="Versions-Historie &amp; Backups"
-        >
-          🕒
-        </button>
-
-        <button
-          type="button"
-          onclick="window.StudioApp.Team?.openModal()"
-          class="w-8 h-8 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center text-xs text-slate-700 dark:text-slate-300 shadow-sm cursor-pointer"
-          title="Teammitglieder verwalten"
-        >
-          👥
-        </button>
-
-        <button
-          type="button"
-          onclick="window.StudioApp.exportProject(window.StudioApp.activeProjectId)"
-          class="w-8 h-8 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center text-xs text-slate-700 dark:text-slate-300 shadow-sm cursor-pointer"
-          title="Projekt als JSON sichern"
-        >
-          💾
-        </button>
-
-        <div class="w-px h-5 bg-slate-200 dark:bg-slate-700 mx-0.5"></div>
-
         <!-- Tasks Drawer Toggle -->
         <button
           type="button"
@@ -249,6 +178,99 @@
           <span class="hidden md:inline">Aufgaben</span>
           <span id="tasksCounterBadge" class="bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-bold px-1.5 py-0.2 rounded-full text-[10px]">0</span>
         </button>
+
+        <!-- View Switcher (Mindmap vs. Dokumente) -->
+        <div class="flex items-center p-0.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs shrink-0">
+          <button
+            type="button"
+            id="btnTabMindmap"
+            onclick="window.StudioApp.switchWorkspaceTab('mindmap')"
+            class="px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition cursor-pointer bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm"
+          >
+            <span>🧠</span>
+            <span>Mindmap</span>
+          </button>
+          <button
+            type="button"
+            id="btnTabDocs"
+            onclick="window.StudioApp.switchWorkspaceTab('docs')"
+            class="px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5 transition cursor-pointer text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+          >
+            <span>📚</span>
+            <span>Dokumente</span>
+          </button>
+        </div>
+
+        <!-- Settings Gear Dropdown Container -->
+        <div id="workspaceSettingsMenuContainer" class="relative">
+          <button
+            type="button"
+            id="btnWorkspaceSettings"
+            onclick="window.StudioApp.toggleWorkspaceSettingsMenu()"
+            class="w-8 h-8 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center text-sm text-slate-700 dark:text-slate-300 shadow-sm transition cursor-pointer"
+            title="Projekt-Optionen &amp; Werkzeuge"
+          >
+            ⚙️
+          </button>
+
+          <!-- Dropdown Menu -->
+          <div
+            id="workspaceSettingsDropdown"
+            class="hidden absolute right-0 mt-2 w-56 bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 py-1.5 z-50 text-xs text-slate-700 dark:text-slate-200"
+          >
+            <button
+              type="button"
+              onclick="window.StudioApp.Mindmap?.autoArrangeNodes(); window.StudioApp.closeWorkspaceSettingsMenu();"
+              class="w-full text-left px-3.5 py-2.5 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2.5 transition cursor-pointer"
+            >
+              <span class="text-base">📐</span>
+              <div>
+                <div class="font-semibold text-slate-900 dark:text-slate-100">Auto-Layout</div>
+                <div class="text-[11px] text-slate-400 dark:text-slate-500">Knoten sauber anordnen</div>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onclick="window.StudioApp.openBackupsModal(); window.StudioApp.closeWorkspaceSettingsMenu();"
+              class="w-full text-left px-3.5 py-2.5 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2.5 transition cursor-pointer"
+            >
+              <span class="text-base">🕒</span>
+              <div>
+                <div class="font-semibold text-slate-900 dark:text-slate-100">Versionen &amp; Backups</div>
+                <div class="text-[11px] text-slate-400 dark:text-slate-500">Wiederherstellungspunkte</div>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onclick="window.StudioApp.Team?.openModal(); window.StudioApp.closeWorkspaceSettingsMenu();"
+              class="w-full text-left px-3.5 py-2.5 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2.5 transition cursor-pointer"
+            >
+              <span class="text-base">👥</span>
+              <div>
+                <div class="font-semibold text-slate-900 dark:text-slate-100">Teammitglieder</div>
+                <div class="text-[11px] text-slate-400 dark:text-slate-500">Zuständigkeiten verwalten</div>
+              </div>
+            </button>
+
+            <div class="my-1 border-t border-slate-100 dark:border-slate-800"></div>
+
+            <button
+              type="button"
+              onclick="window.StudioApp.exportProject(window.StudioApp.activeProjectId); window.StudioApp.closeWorkspaceSettingsMenu();"
+              class="w-full text-left px-3.5 py-2.5 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2.5 transition cursor-pointer text-slate-700 dark:text-slate-200"
+            >
+              <span class="text-base">💾</span>
+              <div>
+                <div class="font-semibold">Projekt exportieren</div>
+                <div class="text-[11px] text-slate-400 dark:text-slate-500">Als JSON herunterladen</div>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        <div class="w-px h-5 bg-slate-200 dark:bg-slate-700 mx-0.5"></div>
 
         <button
           type="button"
@@ -266,31 +288,45 @@
 
       <!-- View Option A: Mindmap Canvas -->
       <div id="workspaceMindmapView" class="flex-1 relative overflow-hidden canvas-grid bg-slate-50 dark:bg-slate-950">
-        <!-- Floating Canvas Controls -->
-        <div class="absolute bottom-6 right-6 z-20 flex flex-col gap-2">
+        <!-- Floating Canvas Controls: Bottom-Left Horizontal Zoom Controls -->
+        <div class="absolute bottom-6 left-6 z-20 flex items-center gap-1 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md p-1 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-lg">
           <button
             type="button"
             onclick="window.StudioApp.Mindmap?.zoomIn()"
-            class="w-9 h-9 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-md flex items-center justify-center text-sm font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer"
-            title="Vergrößern"
+            class="w-9 h-9 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center text-base font-bold text-slate-700 dark:text-slate-200 transition cursor-pointer"
+            title="Vergrößern (+)"
           >
             +
           </button>
           <button
             type="button"
             onclick="window.StudioApp.Mindmap?.zoomOut()"
-            class="w-9 h-9 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-md flex items-center justify-center text-sm font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer"
-            title="Verkleinern"
+            class="w-9 h-9 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center text-base font-bold text-slate-700 dark:text-slate-200 transition cursor-pointer"
+            title="Verkleinern (−)"
           >
             −
           </button>
+          <div class="w-px h-5 bg-slate-200 dark:bg-slate-700 mx-0.5"></div>
           <button
             type="button"
             onclick="window.StudioApp.Mindmap?.centerView()"
-            class="w-9 h-9 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-md flex items-center justify-center text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer"
+            class="w-9 h-9 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center text-sm text-slate-700 dark:text-slate-200 transition cursor-pointer"
             title="Auf Zentrum ausrichten"
           >
             🎯
+          </button>
+        </div>
+
+        <!-- Floating Canvas Controls: Bottom-Right Add Node Button -->
+        <div class="absolute bottom-6 right-6 z-20">
+          <button
+            type="button"
+            onclick="window.StudioApp.Mindmap?.openCreateNodeModal('root', 'right')"
+            class="px-4 py-2.5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs sm:text-sm flex items-center gap-2 shadow-xl shadow-blue-500/30 hover:shadow-blue-500/40 hover:scale-105 active:scale-95 transition-all cursor-pointer"
+            title="Neuen Knoten zur Mindmap hinzufügen"
+          >
+            <span class="text-base">➕</span>
+            <span>Knoten hinzufügen</span>
           </button>
         </div>
 
