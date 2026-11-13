@@ -2,6 +2,21 @@
 import { API, showToast, escapeHtml } from "./api.js";
 import { Team } from "./team.js";
 
+export const BRANCH_PALETTE = [
+  "#2563eb", // Royal Blue
+  "#10b981", // Emerald Green
+  "#f59e0b", // Amber
+  "#8b5cf6", // Purple
+  "#ec4899", // Pink
+  "#06b6d4", // Cyan
+  "#f97316", // Bright Orange
+  "#14b8a6", // Teal
+  "#e11d48", // Rose Red
+  "#6366f1", // Indigo
+  "#84cc16", // Lime Green
+  "#a855f7"  // Violet
+];
+
 export const Mindmap = {
   projectId: null,
   projectData: null,
@@ -144,21 +159,49 @@ export const Mindmap = {
     this.updateTransform();
   },
 
+  getBranchColorMap() {
+    const colorMap = new Map();
+    const leftBranches = this.tree.leftBranches || [];
+    const rightBranches = this.tree.rightBranches || [];
+
+    const assignSubtree = (node, color) => {
+      colorMap.set(node.id, color);
+      if (node.children) {
+        node.children.forEach(ch => assignSubtree(ch, color));
+      }
+    };
+
+    leftBranches.forEach((b, idx) => {
+      const color = (b.color && b.color.startsWith("#")) ? b.color : BRANCH_PALETTE[idx % BRANCH_PALETTE.length];
+      assignSubtree(b, color);
+    });
+
+    const leftOffset = leftBranches.length;
+    rightBranches.forEach((b, idx) => {
+      const color = (b.color && b.color.startsWith("#")) ? b.color : BRANCH_PALETTE[(leftOffset + idx) % BRANCH_PALETTE.length];
+      assignSubtree(b, color);
+    });
+
+    return colorMap;
+  },
+
   render() {
     const nodesLayer = document.getElementById("nodesLayer");
     if (!nodesLayer) return;
     nodesLayer.innerHTML = "";
 
+    const colorMap = this.getBranchColorMap();
     const allNodes = [];
     const extract = (node, parentId = null, side = "right") => {
-      allNodes.push({ ...node, parentId, side });
+      const branchColor = colorMap.get(node.id) || "#3b82f6";
+      allNodes.push({ ...node, parentId, side, branchColor });
       if (node.children) {
         node.children.forEach(ch => extract(ch, node.id, side));
       }
     };
 
     // Root
-    allNodes.push({ ...this.tree, parentId: null, side: "root" });
+    allNodes.push({ ...this.tree, parentId: null, side: "root", branchColor: "#2563eb" });
     (this.tree.leftBranches || []).forEach(b => extract(b, "root", "left"));
     (this.tree.rightBranches || []).forEach(b => extract(b, "root", "right"));
 
@@ -175,6 +218,8 @@ export const Mindmap = {
     div.id = `node_${node.id}`;
     div.dataset.nodeId = node.id;
     const isRoot = node.id === "root" || node.side === "root";
+    const branchColor = node.branchColor || "#3b82f6";
+    const isLeft = node.side === "left";
 
     const pos = this.positions[node.id] || { x: isRoot ? 0 : 300, y: isRoot ? 0 : 0 };
     div.style.left = `${pos.x}px`;
@@ -184,11 +229,22 @@ export const Mindmap = {
     const memberColor = assignee ? (assignee.color || "#3b82f6") : "";
     const memberInitials = assignee ? Team.getInitials(assignee.name) : "";
 
-    div.className = `mindmap-node absolute cursor-grab border rounded-2xl shadow-sm transition-shadow select-none ${
-      isRoot
-        ? "bg-blue-600 text-white border-blue-700 dark:border-blue-500 font-bold px-6 py-4 z-20 text-center min-w-[200px]"
-        : "bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 border-slate-200 dark:border-slate-800 hover:border-blue-400 dark:hover:border-blue-500 px-4 py-3 z-10 min-w-[170px] max-w-[280px]"
-    }`;
+    if (isRoot) {
+      div.className = "group mindmap-node absolute cursor-grab border rounded-2xl shadow-md transition-shadow select-none bg-blue-600 text-white border-blue-700 dark:border-blue-500 font-bold px-6 py-4 z-20 text-center min-w-[200px]";
+    } else {
+      div.className = `group mindmap-node absolute cursor-grab border rounded-2xl shadow-sm hover:shadow-md transition-all select-none bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 border-slate-200 dark:border-slate-800 px-4 py-3 z-10 min-w-[170px] max-w-[280px] ${
+        isLeft ? "border-r-[3.5px]" : "border-l-[3.5px]"
+      }`;
+      div.style.setProperty(isLeft ? "border-right-color" : "border-left-color", branchColor);
+
+      div.addEventListener("mouseenter", () => {
+        div.style.borderColor = branchColor;
+      });
+      div.addEventListener("mouseleave", () => {
+        div.style.borderColor = "";
+        div.style.setProperty(isLeft ? "border-right-color" : "border-left-color", branchColor);
+      });
+    }
 
     div.innerHTML = `
       <div class="relative">
@@ -198,21 +254,32 @@ export const Mindmap = {
           </div>
         ` : ''}
 
-        <div class="flex items-center gap-1.5 mb-0.5">
-          ${node.isFavorite ? '<span class="text-xs text-amber-500">⭐</span>' : ''}
-          <span class="font-bold text-xs ${isRoot ? 'text-white' : 'text-slate-900 dark:text-slate-100'}">${escapeHtml(node.title)}</span>
+        <div class="flex items-center gap-1.5 mb-1 min-w-0">
+          ${!isRoot ? `<span class="w-2.5 h-2.5 rounded-full inline-block shrink-0 shadow-xs" style="background-color: ${branchColor}"></span>` : ''}
+          ${node.isFavorite ? '<span class="text-xs text-amber-500 shrink-0">⭐</span>' : ''}
+          <span class="font-bold text-xs truncate ${isRoot ? 'text-white' : 'text-slate-900 dark:text-slate-100'}">${escapeHtml(node.title)}</span>
         </div>
 
         ${node.desc ? `<p class="text-[11px] line-clamp-2 ${isRoot ? 'text-blue-100' : 'text-slate-500 dark:text-slate-400'} leading-tight">${escapeHtml(node.desc)}</p>` : ''}
 
-        ${!isRoot ? `
+        ${isRoot ? `
+          <div class="mt-3 pt-2 border-t border-blue-500/50 flex items-center justify-center gap-2">
+            <button type="button" class="btn-add-left px-2 py-1 rounded-lg bg-blue-700/80 hover:bg-blue-800 text-white text-[11px] font-semibold flex items-center gap-1 shadow-xs cursor-pointer" title="Hauptzweig nach Links hinzufügen">
+              <span>➕</span><span>Links</span>
+            </button>
+            <button type="button" class="btn-add-right px-2 py-1 rounded-lg bg-blue-700/80 hover:bg-blue-800 text-white text-[11px] font-semibold flex items-center gap-1 shadow-xs cursor-pointer" title="Hauptzweig nach Rechts hinzufügen">
+              <span>➕</span><span>Rechts</span>
+            </button>
+          </div>
+        ` : `
           <div class="mt-2 pt-1.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[10px] text-slate-400">
             <span>${(node.children || []).length > 0 ? `🌿 ${node.children.length}` : '•'}</span>
-            <div class="flex items-center gap-1 opacity-0 hover:opacity-100 group-hover:opacity-100 transition">
-              <button type="button" class="btn-add-sub hover:text-blue-500 p-0.5" title="Unterknoten anlegen">➕</button>
-            </div>
+            <button type="button" class="btn-add-sub px-2 py-0.5 rounded-lg font-bold text-[11px] flex items-center gap-1 cursor-pointer transition hover:scale-105" style="background-color: ${branchColor}18; color: ${branchColor}" title="Unterknoten anlegen">
+              <span>➕</span>
+              <span>Unterknoten</span>
+            </button>
           </div>
-        ` : ''}
+        `}
       </div>
     `;
 
@@ -232,9 +299,19 @@ export const Mindmap = {
 
     // Click to view details
     div.addEventListener("click", (e) => {
+      if (e.target.closest(".btn-add-left")) {
+        e.stopPropagation();
+        this.openCreateNodeModal("root", "left");
+        return;
+      }
+      if (e.target.closest(".btn-add-right")) {
+        e.stopPropagation();
+        this.openCreateNodeModal("root", "right");
+        return;
+      }
       if (e.target.closest(".btn-add-sub")) {
         e.stopPropagation();
-        this.openCreateNodeModal(node.id, node.side);
+        this.openCreateNodeModal(node.id, node.side || "right");
         return;
       }
       this.openNodeDetailModal(node);
@@ -248,7 +325,9 @@ export const Mindmap = {
     if (!svg) return;
     svg.innerHTML = "";
 
-    const drawConnection = (childNode, parentId, side) => {
+    const colorMap = this.getBranchColorMap();
+
+    const drawConnection = (childNode, parentId, side, isRootConnection = false) => {
       const parentEl = document.getElementById(`node_${parentId}`);
       const childEl = document.getElementById(`node_${childNode.id}`);
       if (!parentEl || !childEl) return;
@@ -280,22 +359,24 @@ export const Mindmap = {
       const cx1 = side === "left" ? startX - dx : startX + dx;
       const cx2 = side === "left" ? endX + dx : endX - dx;
 
+      const branchColor = colorMap.get(childNode.id) || "#3b82f6";
+
       const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
       path.setAttribute("d", `M ${startX} ${startY} C ${cx1} ${startY}, ${cx2} ${endY}, ${endX} ${endY}`);
       path.setAttribute("fill", "none");
-      path.setAttribute("stroke", childNode.color === "green" ? "#10b981" : (childNode.color === "purple" ? "#8b5cf6" : "#3b82f6"));
-      path.setAttribute("stroke-width", "2");
+      path.setAttribute("stroke", branchColor);
+      path.setAttribute("stroke-width", isRootConnection ? "3" : "2.2");
       path.setAttribute("stroke-linecap", "round");
-      path.setAttribute("opacity", "0.65");
+      path.setAttribute("opacity", isRootConnection ? "0.9" : "0.75");
       svg.appendChild(path);
 
       if (childNode.children) {
-        childNode.children.forEach(ch => drawConnection(ch, childNode.id, side));
+        childNode.children.forEach(ch => drawConnection(ch, childNode.id, side, false));
       }
     };
 
-    (this.tree.leftBranches || []).forEach(b => drawConnection(b, "root", "left"));
-    (this.tree.rightBranches || []).forEach(b => drawConnection(b, "root", "right"));
+    (this.tree.leftBranches || []).forEach(b => drawConnection(b, "root", "left", true));
+    (this.tree.rightBranches || []).forEach(b => drawConnection(b, "root", "right", true));
   },
 
   async autoArrangeNodes() {
@@ -306,23 +387,44 @@ export const Mindmap = {
     // Center root
     newPositions["root"] = { x: 0, y: 0 };
 
-    // Layout branch recursive
-    const layoutBranch = (nodes, startX, dir, startY = 0) => {
-      let currentY = startY - ((nodes.length - 1) * spacingY) / 2;
-      nodes.forEach(node => {
-        newPositions[node.id] = { x: startX, y: currentY };
-        if (node.children && node.children.length > 0) {
-          layoutBranch(node.children, startX + dir * spacingX, dir, currentY);
-        }
-        currentY += spacingY;
+    const getSubtreeHeight = (node) => {
+      if (!node.children || node.children.length === 0) return spacingY;
+      let total = 0;
+      node.children.forEach(ch => { total += getSubtreeHeight(ch); });
+      return Math.max(spacingY, total);
+    };
+
+    const layoutSubtree = (node, x, dir, yCenter) => {
+      newPositions[node.id] = { x: Math.round(x), y: Math.round(yCenter) };
+      if (!node.children || node.children.length === 0) return;
+
+      const totalH = getSubtreeHeight(node);
+      let curY = yCenter - totalH / 2;
+      node.children.forEach(ch => {
+        const chH = getSubtreeHeight(ch);
+        const chCenterY = curY + chH / 2;
+        layoutSubtree(ch, x + dir * spacingX, dir, chCenterY);
+        curY += chH;
+      });
+    };
+
+    const layoutBranchList = (nodes, dir) => {
+      let totalH = 0;
+      nodes.forEach(n => { totalH += getSubtreeHeight(n); });
+      let curY = -totalH / 2;
+      nodes.forEach(n => {
+        const h = getSubtreeHeight(n);
+        const centerY = curY + h / 2;
+        layoutSubtree(n, dir * spacingX, dir, centerY);
+        curY += h;
       });
     };
 
     const left = this.tree.leftBranches || [];
     const right = this.tree.rightBranches || [];
 
-    layoutBranch(right, spacingX, 1);
-    layoutBranch(left, -spacingX, -1);
+    layoutBranchList(right, 1);
+    layoutBranchList(left, -1);
 
     this.positions = newPositions;
     this.render();
@@ -379,8 +481,17 @@ export const Mindmap = {
   },
 
   closeNodeDetailModal() {
+    this.activeNodeData = null;
     const modal = document.getElementById("nodeDetailModal");
     modal?.classList.add("hidden");
+  },
+
+  openCreateSubnodeFromActive() {
+    if (!this.activeNodeData) return;
+    const parentId = this.activeNodeData.id;
+    const side = this.activeNodeData.side || "right";
+    this.closeNodeDetailModal();
+    this.openCreateNodeModal(parentId, side);
   },
 
   openCreateNodeModal(parentId = "root", side = "right") {
@@ -389,33 +500,48 @@ export const Mindmap = {
     const idInput = document.getElementById("editNodeId");
     const parentInput = document.getElementById("editNodeParentId");
     const sideInput = document.getElementById("editNodeSide");
+    const sideContainer = document.getElementById("editNodeSideContainer");
     const titleInput = document.getElementById("editNodeTitle");
     const descInput = document.getElementById("editNodeDesc");
     const detailsInput = document.getElementById("editNodeDetails");
+    const favInput = document.getElementById("editNodeFavorite");
 
     if (!modal) return;
-    if (heading) heading.textContent = "Neuen Unterknoten hinzufügen";
+    if (heading) heading.textContent = parentId === "root" ? "Neuen Hauptknoten hinzufügen" : "Neuen Unterknoten hinzufügen";
     if (idInput) idInput.value = "";
     if (parentInput) parentInput.value = parentId;
     if (sideInput) sideInput.value = side;
     if (titleInput) titleInput.value = "";
     if (descInput) descInput.value = "";
     if (detailsInput) detailsInput.value = "";
+    if (favInput) favInput.checked = false;
+
+    if (sideContainer) {
+      if (parentId === "root") {
+        sideContainer.classList.remove("hidden");
+        const radios = sideContainer.querySelectorAll("input[type='radio']");
+        radios.forEach(r => { r.checked = (r.value === side); });
+      } else {
+        sideContainer.classList.add("hidden");
+      }
+    }
 
     Team.populateSelect("editNodeAssignee", "");
     modal.classList.remove("hidden");
+    setTimeout(() => titleInput?.focus(), 50);
   },
 
   openEditActiveNode() {
     if (!this.activeNodeData) return;
-    this.closeNodeDetailModal();
     const node = this.activeNodeData;
+    this.closeNodeDetailModal();
 
     const modal = document.getElementById("nodeEditModal");
     const heading = document.getElementById("nodeEditModalTitle");
     const idInput = document.getElementById("editNodeId");
     const parentInput = document.getElementById("editNodeParentId");
     const sideInput = document.getElementById("editNodeSide");
+    const sideContainer = document.getElementById("editNodeSideContainer");
     const titleInput = document.getElementById("editNodeTitle");
     const descInput = document.getElementById("editNodeDesc");
     const detailsInput = document.getElementById("editNodeDetails");
@@ -431,8 +557,13 @@ export const Mindmap = {
     if (detailsInput) detailsInput.value = node.details || "";
     if (favInput) favInput.checked = !!node.isFavorite;
 
+    if (sideContainer) {
+      sideContainer.classList.add("hidden");
+    }
+
     Team.populateSelect("editNodeAssignee", node.assigneeId || "");
     modal.classList.remove("hidden");
+    setTimeout(() => titleInput?.focus(), 50);
   },
 
   async saveNodeFromForm() {
@@ -457,15 +588,31 @@ export const Mindmap = {
 
     try {
       if (!nodeId) {
+        // Calculate smart offset position based on parent and side
+        let posX = 350;
+        let posY = 0;
+        const dir = side === "left" ? -1 : 1;
+        if (parentId === "root") {
+          const branches = side === "left" ? (this.tree.leftBranches || []) : (this.tree.rightBranches || []);
+          posX = dir * (this.spacing?.x || 350);
+          posY = branches.length * (this.spacing?.y || 80);
+        } else {
+          const pPos = this.positions[parentId] || { x: 0, y: 0 };
+          posX = pPos.x + dir * (this.spacing?.x || 350);
+          posY = pPos.y + 40;
+        }
+
         // Create
-        const res = await API.post(`/api/projects/${this.projectId}/nodes`, {
+        await API.post(`/api/projects/${this.projectId}/nodes`, {
           parent_id: parentId,
           side: side,
           title: title,
           desc: descInput?.value.trim(),
           details: detailsInput?.value.trim(),
           assignee_id: assigneeSelect?.value || "",
-          is_favorite: !!favInput?.checked
+          is_favorite: !!favInput?.checked,
+          pos_x: Math.round(posX),
+          pos_y: Math.round(posY)
         });
         showToast("Knoten angelegt!");
       } else {
