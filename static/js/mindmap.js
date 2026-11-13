@@ -31,7 +31,7 @@ export const Mindmap = {
   isPanning: false,
   startPan: { x: 0, y: 0 },
 
-  // Marquee Box Selection (Shift + Drag on background)
+  // Marquee Box Selection (Ctrl + Drag on background)
   isBoxSelecting: false,
   boxStart: { x: 0, y: 0 },
   boxInitialSelection: new Set(),
@@ -42,27 +42,41 @@ export const Mindmap = {
   dragStartCoords: { x: 0, y: 0 },
   dragStartNodePos: { x: 0, y: 0 },
   hasDragged: false,
-  isShiftPressed: false,
-  isShiftDragging: false,
-  shiftDescendantsAdded: false,
+  isCtrlPressed: false,
+  isCtrlDragging: false,
+  ctrlDescendantsAdded: false,
   coMovedInitialPositions: new Map(),
   selectedNodeIds: new Set(),
   _eventsBound: false,
   activeNodeData: null,
 
+  // Clipboard & Undo/Redo history
+  clipboard: null,
+  undoStack: [],
+  redoStack: [],
+  maxHistorySize: 50,
+  _dragBeforeSnapshot: null,
+  _isApplyingHistory: false,
+
   init(projectId, projectData, preserveViewport = false) {
+    const isNewProject = this.projectId !== projectId;
     this.projectId = projectId;
     this.projectData = projectData;
     this.tree = projectData.tree || { id: "root", title: "Zentrum", leftBranches: [], rightBranches: [] };
     this.positions = projectData.positions || {};
     this.spacing = projectData.spacing || { x: 350, y: 80 };
+    if (isNewProject) {
+      this.undoStack = [];
+      this.redoStack = [];
+      this.clipboard = null;
+    }
     if (!preserveViewport) {
       this.selectedNodeIds = new Set();
     }
     this.draggedNodeId = null;
     this.isBoxSelecting = false;
-    this.isShiftDragging = false;
-    this.shiftDescendantsAdded = false;
+    this.isCtrlDragging = false;
+    this.ctrlDescendantsAdded = false;
     this.coMovedInitialPositions = new Map();
 
     if (!preserveViewport) {
@@ -80,8 +94,8 @@ export const Mindmap = {
     }
   },
 
-  toggleNodeSelection(nodeId, isShift) {
-    if (isShift) {
+  toggleNodeSelection(nodeId, isMulti) {
+    if (isMulti) {
       if (this.selectedNodeIds.has(nodeId)) {
         this.selectedNodeIds.delete(nodeId);
       } else {
@@ -181,8 +195,8 @@ export const Mindmap = {
       if (e.target.closest(".mindmap-node") || e.target.closest("button") || e.target.closest("input")) {
         return;
       }
-      const shiftActive = e.shiftKey || this.isShiftPressed;
-      if (shiftActive) {
+      const ctrlActive = e.ctrlKey || e.metaKey || this.isCtrlPressed;
+      if (ctrlActive) {
         // Start marquee box selection
         const rect = container.getBoundingClientRect();
         this.isBoxSelecting = true;
@@ -225,13 +239,56 @@ export const Mindmap = {
     this._eventsBound = true;
 
     window.addEventListener("keydown", (e) => {
-      if (e.key === "Shift") this.isShiftPressed = true;
+      if (e.key === "Control" || e.key === "Meta") this.isCtrlPressed = true;
+
+      if (!this.canHandleCanvasShortcut()) return;
+
+      if (e.key === "Delete" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (this.selectedNodeIds.size > 0) {
+          e.preventDefault();
+          this.deleteSelectedNodes();
+        }
+        return;
+      }
+
+      const isMod = e.ctrlKey || e.metaKey;
+      if (isMod && !e.altKey) {
+        const key = e.key.toLowerCase();
+        if (key === "c" && !e.shiftKey) {
+          if (this.selectedNodeIds.size > 0) {
+            e.preventDefault();
+            this.copySelectedNodes();
+          }
+          return;
+        }
+        if (key === "v" && !e.shiftKey) {
+          if (this.clipboard && this.clipboard.length > 0) {
+            e.preventDefault();
+            this.pasteNodes();
+          }
+          return;
+        }
+        if (key === "z") {
+          e.preventDefault();
+          if (e.shiftKey) {
+            this.redo();
+          } else {
+            this.undo();
+          }
+          return;
+        }
+        if (key === "y" && !e.shiftKey) {
+          e.preventDefault();
+          this.redo();
+          return;
+        }
+      }
     });
     window.addEventListener("keyup", (e) => {
-      if (e.key === "Shift") this.isShiftPressed = false;
+      if (e.key === "Control" || e.key === "Meta") this.isCtrlPressed = false;
     });
     window.addEventListener("blur", () => {
-      this.isShiftPressed = false;
+      this.isCtrlPressed = false;
     });
 
     window.addEventListener("pointermove", (e) => {
@@ -289,11 +346,11 @@ export const Mindmap = {
             this.hasDragged = true;
           }
 
-          // If user presses Shift during drag, dynamically add descendants
-          const shiftActive = e.shiftKey || this.isShiftPressed;
-          if (shiftActive && !this.shiftDescendantsAdded) {
-            this.shiftDescendantsAdded = true;
-            this.isShiftDragging = true;
+          // If user presses Ctrl during drag, dynamically add descendants
+          const ctrlActive = e.ctrlKey || e.metaKey || this.isCtrlPressed;
+          if (ctrlActive && !this.ctrlDescendantsAdded) {
+            this.ctrlDescendantsAdded = true;
+            this.isCtrlDragging = true;
             this.addCoMovedNodes(this.getDescendantIds(this.draggedNodeId), dx, dy);
           }
 
@@ -342,12 +399,18 @@ export const Mindmap = {
         const moved = this.hasDragged;
 
         this.draggedNodeId = null;
-        this.isShiftDragging = false;
-        this.shiftDescendantsAdded = false;
+        this.isCtrlDragging = false;
+        this.ctrlDescendantsAdded = false;
         this.coMovedInitialPositions.clear();
 
         if (!moved) {
+          this._dragBeforeSnapshot = null;
           return;
+        }
+
+        if (this._dragBeforeSnapshot) {
+          this.pushUndoState(this._dragBeforeSnapshot);
+          this._dragBeforeSnapshot = null;
         }
 
         if (hadCoMoved) {
@@ -558,13 +621,14 @@ export const Mindmap = {
       e.preventDefault();
       e.stopPropagation();
 
-      const shiftActive = e.shiftKey || this.isShiftPressed;
+      const ctrlActive = e.ctrlKey || e.metaKey || this.isCtrlPressed;
       this.draggedNodeId = node.id;
       this.dragStartCoords = { x: e.clientX, y: e.clientY };
       this.hasDragged = false;
-      this.isShiftDragging = shiftActive;
-      this.shiftDescendantsAdded = false;
+      this.isCtrlDragging = ctrlActive;
+      this.ctrlDescendantsAdded = false;
       this.coMovedInitialPositions = new Map();
+      this._dragBeforeSnapshot = this.captureSnapshot();
 
       div.classList.add("is-dragging");
 
@@ -581,9 +645,9 @@ export const Mindmap = {
         this.addCoMovedNodes(Array.from(this.selectedNodeIds), 0, 0);
       }
 
-      // If Shift is held, co-move all recursive descendants of the dragged node
-      if (shiftActive) {
-        this.shiftDescendantsAdded = true;
+      // If Ctrl is held, co-move all recursive descendants of the dragged node
+      if (ctrlActive) {
+        this.ctrlDescendantsAdded = true;
         this.addCoMovedNodes(this.getDescendantIds(node.id), 0, 0);
       }
     });
@@ -604,7 +668,7 @@ export const Mindmap = {
         return;
       }
       e.stopPropagation();
-      this.toggleNodeSelection(node.id, e.shiftKey || this.isShiftPressed);
+      this.toggleNodeSelection(node.id, e.ctrlKey || e.metaKey || this.isCtrlPressed);
     });
 
     // Double click to view details and edit modal
@@ -678,7 +742,10 @@ export const Mindmap = {
     (this.tree.rightBranches || []).forEach(b => drawConnection(b, "root", "right", true));
   },
 
-  async autoArrangeNodes(shouldCenter = true, showNotification = true) {
+  async autoArrangeNodes(shouldCenter = true, showNotification = true, saveHistory = true) {
+    if (saveHistory) {
+      this.pushUndoState();
+    }
     const gapX = 110;
     const gapY = 30;
     const minSpacingY = Math.max(this.spacing.y || 80, 100);
@@ -954,6 +1021,7 @@ export const Mindmap = {
     const side = sideInput?.value || "right";
 
     try {
+      this.pushUndoState();
       if (!nodeId) {
         // Calculate smart offset position based on parent and side
         let posX = 350;
@@ -1001,7 +1069,7 @@ export const Mindmap = {
       await window.StudioApp?.reloadCurrentWorkspace(false, true);
       if (!nodeId) {
         // Auto-arrange without centering so new nodes never overlap existing ones
-        await this.autoArrangeNodes(false, false);
+        await this.autoArrangeNodes(false, false, false);
       }
     } catch (err) {
       showToast(err.message, "error");
@@ -1013,12 +1081,392 @@ export const Mindmap = {
     if (!confirm(`Knoten "${this.activeNodeData.title}" und alle Unterknoten wirklich löschen?`)) return;
 
     try {
+      this.pushUndoState();
       await API.delete(`/api/projects/${this.projectId}/nodes/${this.activeNodeData.id}`);
       this.closeNodeDetailModal();
       showToast("Knoten gelöscht!");
       await window.StudioApp?.reloadCurrentWorkspace(false, true);
     } catch (err) {
       showToast(err.message, "error");
+    }
+  },
+
+  canHandleCanvasShortcut() {
+    if (!this.projectId) return false;
+    const canvas = document.getElementById("canvasContainer");
+    if (!canvas || canvas.offsetParent === null) return false;
+    if (document.querySelector(".fixed.inset-0:not(.hidden)")) return false;
+    const active = document.activeElement;
+    if (active && (
+      active.tagName === "INPUT" ||
+      active.tagName === "TEXTAREA" ||
+      active.tagName === "SELECT" ||
+      active.isContentEditable
+    )) {
+      return false;
+    }
+    return true;
+  },
+
+  flattenTreeNodes() {
+    const map = new Map();
+    if (!this.tree) return map;
+
+    const visit = (node, parentId, defaultSide, depth) => {
+      if (!node) return;
+      const side = node.id === "root" ? null : (node.side || defaultSide || "right");
+      const pos = this.positions[node.id] || {
+        x: node.pos_x ?? 0,
+        y: node.pos_y ?? 0
+      };
+      map.set(node.id, {
+        id: node.id,
+        parentId: parentId,
+        side: side,
+        depth: depth,
+        title: node.title || "",
+        desc: node.desc || "",
+        details: node.details || "",
+        bullets: Array.isArray(node.bullets) ? [...node.bullets] : [],
+        literature: node.literature || "",
+        color: node.color || "blue",
+        assigneeId: node.assigneeId || "",
+        isFavorite: !!node.isFavorite,
+        pos_x: Math.round(pos.x ?? 0),
+        pos_y: Math.round(pos.y ?? 0),
+        rawChildren: node.id === "root"
+          ? [...(node.leftBranches || []), ...(node.rightBranches || [])]
+          : (node.children || [])
+      });
+
+      if (node.id === "root") {
+        (node.leftBranches || []).forEach(ch => visit(ch, "root", "left", depth + 1));
+        (node.rightBranches || []).forEach(ch => visit(ch, "root", "right", depth + 1));
+      } else {
+        (node.children || []).forEach(ch => visit(ch, node.id, side, depth + 1));
+      }
+    };
+
+    visit(this.tree, null, null, 0);
+    return map;
+  },
+
+  captureSnapshot() {
+    const flat = this.flattenTreeNodes();
+    const nodes = {};
+    const positions = {};
+    for (const [id, n] of flat.entries()) {
+      nodes[id] = {
+        id: n.id,
+        parentId: n.parentId,
+        side: n.side,
+        depth: n.depth,
+        title: n.title,
+        desc: n.desc,
+        details: n.details,
+        bullets: [...n.bullets],
+        literature: n.literature,
+        color: n.color,
+        assigneeId: n.assigneeId,
+        isFavorite: n.isFavorite
+      };
+      positions[id] = { x: n.pos_x, y: n.pos_y };
+    }
+    return { nodes, positions };
+  },
+
+  pushUndoState(snapshot = null) {
+    if (this._isApplyingHistory || !this.projectId || !this.tree) return;
+    const snap = snapshot || this.captureSnapshot();
+    this.undoStack.push(snap);
+    if (this.undoStack.length > this.maxHistorySize) {
+      this.undoStack.shift();
+    }
+    this.redoStack = [];
+  },
+
+  async applySnapshotDiff(targetSnap) {
+    if (!targetSnap || !this.projectId) return;
+    this._isApplyingHistory = true;
+    try {
+      const currentSnap = this.captureSnapshot();
+      const currNodes = currentSnap.nodes;
+      const targetNodes = targetSnap.nodes;
+
+      // 1. Delete nodes present in current but missing in target (top-down so server cascades children)
+      const toDelete = Object.keys(currNodes).filter(id => id !== "root" && !targetNodes[id]);
+      const toDeleteSet = new Set(toDelete);
+      const topDeletes = toDelete.filter(id => {
+        let pid = currNodes[id]?.parentId;
+        while (pid) {
+          if (toDeleteSet.has(pid)) return false;
+          pid = currNodes[pid]?.parentId;
+        }
+        return true;
+      });
+      for (const nid of topDeletes) {
+        await API.delete(`/api/projects/${this.projectId}/nodes/${nid}`);
+      }
+
+      // 2. Create nodes present in target but missing in current (sorted by depth ascending)
+      const toCreate = Object.values(targetNodes)
+        .filter(n => n.id !== "root" && !currNodes[n.id])
+        .sort((a, b) => a.depth - b.depth);
+      for (const n of toCreate) {
+        const pos = targetSnap.positions[n.id] || { x: 0, y: 0 };
+        await API.post(`/api/projects/${this.projectId}/nodes`, {
+          id: n.id,
+          parent_id: n.parentId || "root",
+          side: n.side || "right",
+          title: n.title,
+          desc: n.desc,
+          details: n.details,
+          bullets: n.bullets,
+          literature: n.literature,
+          color: n.color,
+          assignee_id: n.assigneeId,
+          is_favorite: n.isFavorite,
+          pos_x: pos.x,
+          pos_y: pos.y
+        });
+      }
+
+      // 3. Update nodes present in both whose content/metadata changed
+      for (const id of Object.keys(targetNodes)) {
+        const cur = currNodes[id];
+        const tgt = targetNodes[id];
+        if (!cur) continue;
+        const changed = (
+          cur.title !== tgt.title ||
+          cur.desc !== tgt.desc ||
+          cur.details !== tgt.details ||
+          cur.literature !== tgt.literature ||
+          cur.color !== tgt.color ||
+          cur.assigneeId !== tgt.assigneeId ||
+          cur.isFavorite !== tgt.isFavorite ||
+          cur.parentId !== tgt.parentId ||
+          cur.side !== tgt.side ||
+          JSON.stringify(cur.bullets) !== JSON.stringify(tgt.bullets)
+        );
+        if (changed) {
+          await API.put(`/api/projects/${this.projectId}/nodes/${id}`, {
+            title: tgt.title,
+            desc: tgt.desc,
+            details: tgt.details,
+            bullets: tgt.bullets,
+            literature: tgt.literature,
+            color: tgt.color,
+            assignee_id: tgt.assigneeId,
+            cascade_assignee: false,
+            is_favorite: tgt.isFavorite,
+            parent_id: id === "root" ? undefined : tgt.parentId,
+            side: id === "root" ? undefined : tgt.side
+          });
+        }
+      }
+
+      // 4. Batch update changed positions
+      const posUpdates = {};
+      for (const [id, tPos] of Object.entries(targetSnap.positions)) {
+        const cPos = currentSnap.positions[id];
+        if (!cPos || cPos.x !== tPos.x || cPos.y !== tPos.y || !currNodes[id]) {
+          posUpdates[id] = { x: tPos.x, y: tPos.y };
+        }
+      }
+      if (Object.keys(posUpdates).length > 0) {
+        await API.post(`/api/projects/${this.projectId}/nodes/positions/batch`, {
+          positions: posUpdates
+        });
+      }
+
+      this.selectedNodeIds.clear();
+      await window.StudioApp?.reloadCurrentWorkspace(false, true);
+    } finally {
+      this._isApplyingHistory = false;
+    }
+  },
+
+  async undo() {
+    if (this._isApplyingHistory) return;
+    if (this.undoStack.length === 0) {
+      showToast("Nichts rückgängig zu machen", "info");
+      return;
+    }
+    const currentSnap = this.captureSnapshot();
+    const targetSnap = this.undoStack.pop();
+    this.redoStack.push(currentSnap);
+    try {
+      await this.applySnapshotDiff(targetSnap);
+      showToast("Rückgängig gemacht");
+    } catch (err) {
+      this.undoStack.push(targetSnap);
+      this.redoStack.pop();
+      showToast(err.message || "Fehler beim Rückgängigmachen", "error");
+    }
+  },
+
+  async redo() {
+    if (this._isApplyingHistory) return;
+    if (this.redoStack.length === 0) {
+      showToast("Nichts wiederherzustellen", "info");
+      return;
+    }
+    const currentSnap = this.captureSnapshot();
+    const targetSnap = this.redoStack.pop();
+    this.undoStack.push(currentSnap);
+    try {
+      await this.applySnapshotDiff(targetSnap);
+      showToast("Wiederhergestellt");
+    } catch (err) {
+      this.redoStack.push(targetSnap);
+      this.undoStack.pop();
+      showToast(err.message || "Fehler beim Wiederherstellen", "error");
+    }
+  },
+
+  async deleteSelectedNodes() {
+    if (this.selectedNodeIds.size === 0) return;
+    const flat = this.flattenTreeNodes();
+    const selectedValid = new Set(
+      Array.from(this.selectedNodeIds).filter(id => id !== "root" && flat.has(id))
+    );
+    if (selectedValid.size === 0) {
+      if (this.selectedNodeIds.has("root")) {
+        showToast("Wurzelknoten kann nicht gelöscht werden", "error");
+      }
+      return;
+    }
+
+    // Filter to top-level selections so deleting a parent doesn't double-delete selected descendants
+    const topIds = Array.from(selectedValid).filter(id => {
+      let pid = flat.get(id)?.parentId;
+      while (pid) {
+        if (selectedValid.has(pid)) return false;
+        pid = flat.get(pid)?.parentId;
+      }
+      return true;
+    });
+
+    try {
+      this.pushUndoState();
+      let deletedCount = 0;
+      for (const nid of topIds) {
+        const res = await API.delete(`/api/projects/${this.projectId}/nodes/${nid}`);
+        deletedCount += Array.isArray(res?.deleted_ids) ? res.deleted_ids.length : 1;
+      }
+      this.selectedNodeIds.clear();
+      await window.StudioApp?.reloadCurrentWorkspace(false, true);
+      showToast(`${deletedCount} Knoten gelöscht`);
+    } catch (err) {
+      showToast(err.message || "Fehler beim Löschen", "error");
+    }
+  },
+
+  copySelectedNodes() {
+    const flat = this.flattenTreeNodes();
+    const selectedSet = new Set(
+      Array.from(this.selectedNodeIds).filter(id => id !== "root" && flat.has(id))
+    );
+    if (selectedSet.size === 0) {
+      if (this.selectedNodeIds.has("root")) {
+        showToast("Wurzelknoten kann nicht kopiert werden", "info");
+      }
+      return;
+    }
+
+    const buildClipboardTree = (nodeId) => {
+      const n = flat.get(nodeId);
+      const children = (n.rawChildren || [])
+        .filter(ch => selectedSet.has(ch.id))
+        .map(ch => buildClipboardTree(ch.id));
+      return {
+        originalParentId: n.parentId || "root",
+        side: n.side || "right",
+        title: n.title,
+        desc: n.desc,
+        details: n.details,
+        bullets: [...n.bullets],
+        literature: n.literature,
+        color: n.color,
+        assigneeId: n.assigneeId,
+        isFavorite: n.isFavorite,
+        pos_x: n.pos_x,
+        pos_y: n.pos_y,
+        children
+      };
+    };
+
+    const topIds = Array.from(selectedSet).filter(id => {
+      let pid = flat.get(id)?.parentId;
+      while (pid) {
+        if (selectedSet.has(pid)) return false;
+        pid = flat.get(pid)?.parentId;
+      }
+      return true;
+    });
+
+    this.clipboard = topIds.map(id => buildClipboardTree(id));
+    showToast(`${selectedSet.size} Knoten kopiert`);
+  },
+
+  async pasteNodes() {
+    if (!this.clipboard || this.clipboard.length === 0) return;
+
+    const flat = this.flattenTreeNodes();
+    const singleTargetId = this.selectedNodeIds.size === 1
+      ? Array.from(this.selectedNodeIds)[0]
+      : null;
+
+    this.pushUndoState();
+    const insertedTopIds = [];
+    let insertedCount = 0;
+
+    const insertItem = async (item, parentId, side, offsetX, offsetY) => {
+      const res = await API.post(`/api/projects/${this.projectId}/nodes`, {
+        parent_id: parentId,
+        side: side,
+        title: item.title,
+        desc: item.desc,
+        details: item.details,
+        bullets: item.bullets,
+        literature: item.literature,
+        color: item.color,
+        assignee_id: item.assigneeId,
+        is_favorite: item.isFavorite,
+        pos_x: Math.round((item.pos_x || 0) + offsetX),
+        pos_y: Math.round((item.pos_y || 0) + offsetY)
+      });
+      insertedCount++;
+      const newId = res?.node?.id;
+      if (newId && item.children && item.children.length > 0) {
+        for (const ch of item.children) {
+          await insertItem(ch, newId, side, offsetX, offsetY);
+        }
+      }
+      return newId;
+    };
+
+    try {
+      for (const item of this.clipboard) {
+        let targetParentId = singleTargetId;
+        if (!targetParentId) {
+          targetParentId = flat.has(item.originalParentId) ? item.originalParentId : "root";
+        }
+        const targetNode = flat.get(targetParentId);
+        const side = targetParentId === "root"
+          ? (item.side || "right")
+          : (targetNode?.side || item.side || "right");
+        const newId = await insertItem(item, targetParentId, side, 40, 40);
+        if (newId) insertedTopIds.push(newId);
+      }
+
+      this.selectedNodeIds = new Set(insertedTopIds);
+      await window.StudioApp?.reloadCurrentWorkspace(false, true);
+      await this.autoArrangeNodes(false, false, false);
+      this.updateSelectionStyles();
+      showToast(`${insertedCount} Knoten eingefügt`);
+    } catch (err) {
+      showToast(err.message || "Fehler beim Einfügen", "error");
     }
   }
 };
