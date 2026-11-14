@@ -57,6 +57,7 @@ export const Mindmap = {
   maxHistorySize: 50,
   _dragBeforeSnapshot: null,
   _isApplyingHistory: false,
+  descDisplayMode: localStorage.getItem("studio_desc_display_mode") || "compact",
 
   init(projectId, projectData, preserveViewport = false) {
     const isNewProject = this.projectId !== projectId;
@@ -86,6 +87,7 @@ export const Mindmap = {
     }
 
     this.setupCanvasEvents();
+    this.updateDescModeButtons();
     this.render();
     if (preserveViewport) {
       this.updateTransform();
@@ -576,12 +578,17 @@ export const Mindmap = {
     const hasChildren = isRoot
       ? ((node.leftBranches && node.leftBranches.length > 0) || (node.rightBranches && node.rightBranches.length > 0))
       : (node.children && node.children.length > 0);
+    const mode = this.descDisplayMode || "compact";
     let displayDesc = (node.desc || "").trim();
-    if (!displayDesc && hasChildren && node.details) {
+    if (!displayDesc && (hasChildren || mode === "all") && node.details) {
       const firstLine = node.details.trim().split(/\r?\n/)[0].replace(/^[#>*\-\s]+/, "").trim();
       displayDesc = firstLine.length > 140 ? firstLine.slice(0, 137) + "…" : firstLine;
     }
-    const showDesc = !!(hasChildren && displayDesc);
+    const showDesc = mode === "none"
+      ? false
+      : mode === "all"
+        ? !!displayDesc
+        : !!(hasChildren && displayDesc);
 
     div.innerHTML = `
       <div class="relative">
@@ -1468,5 +1475,28 @@ export const Mindmap = {
     } catch (err) {
       showToast(err.message || "Fehler beim Einfügen", "error");
     }
+  },
+
+  setDescDisplayMode(mode) {
+    if (!["none", "compact", "all"].includes(mode)) return;
+    this.descDisplayMode = mode;
+    localStorage.setItem("studio_desc_display_mode", mode);
+    this.updateDescModeButtons();
+    if (this.tree) {
+      this.render();
+    }
+  },
+
+  updateDescModeButtons() {
+    document.querySelectorAll("[data-desc-mode]").forEach(btn => {
+      const isActive = btn.dataset.descMode === this.descDisplayMode;
+      btn.classList.toggle("bg-blue-600", isActive);
+      btn.classList.toggle("text-white", isActive);
+      btn.classList.toggle("shadow-sm", isActive);
+      btn.classList.toggle("text-slate-600", !isActive);
+      btn.classList.toggle("dark:text-slate-300", !isActive);
+      btn.classList.toggle("hover:bg-slate-200/70", !isActive);
+      btn.classList.toggle("dark:hover:bg-slate-700/70", !isActive);
+    });
   }
 };
